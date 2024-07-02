@@ -160,9 +160,6 @@ class TheSeed:
     linkStart: _TheSeedCore.linkStart = None
     linkStop: _TheSeedCore.linkStop = None
 
-    def __new__(cls, *args, **kwargs):
-        raise RuntimeError("TheSeed is a static class cannot be instantiated.")
-
     @staticmethod
     def commandProcessor(command):
         if command == "start http server":
