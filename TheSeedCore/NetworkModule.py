@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TheSeed Network Services Module
+TheSeedCore Network Services Module
 
 # This module delivers robust implementations for HTTP and WebSocket servers and clients, facilitating the development of network services
 # that support high concurrency and real-time data exchange. It's designed to enable quick setup and management of network communications
@@ -33,7 +33,11 @@ TheSeed Network Services Module
 
 from __future__ import annotations
 
-__all__ = ["HTTPServer", "WebSocketServer", "WebSocketClient"]
+__all__ = [
+    "HTTPServer",
+    "WebSocketServer",
+    "WebSocketClient"
+]
 
 import asyncio
 import json
@@ -52,7 +56,7 @@ if TYPE_CHECKING:
 
 class HTTPServer:
     """
-    TheSeed HTTP 服务器。
+    TheSeedCore HTTP 服务器。
 
     参数:
         :param Host : 服务器主机地址。
@@ -194,9 +198,9 @@ class HTTPServer:
                 site = web.TCPSite(self._Runner, str(self._Host), int(self._Port))
                 await site.start()
                 self._IsRunning = True
-                self._Logger.info(f"HTTP server started at {self._Host}:{self._Port}")
+                self._Logger.debug(f"HTTP server started at {self._Host}:{self._Port}")
             else:
-                self._Logger.info("HTTP server is already running")
+                self._Logger.debug("HTTP server is already running")
         except Exception as e:
             self._Logger.error(f"HTTP server startup failed : {e}")
 
@@ -209,7 +213,7 @@ class HTTPServer:
                 self._IsRunning = False
                 self._HTTPApplication = web.Application()
                 self._Runner = None
-        self._Logger.info("HTTP server is turned off.")
+        self._Logger.debug("HTTP server is turned off.")
         self.IsClosed = True
 
     async def _addressChangedHandler(self, request) -> web.Response:
@@ -237,7 +241,7 @@ class HTTPServer:
 
 class WebSocketServer:
     """
-    TheSeed WebSocket服务器
+    TheSeedCore WebSocket服务器
 
     参数:
         :param Host : 服务器主机地址。
@@ -310,7 +314,7 @@ class WebSocketServer:
     async def startWebSocketServer(self):
         """启动 WebSocket 服务器。"""
         self._Server = await websockets.serve(self._wsProcessor, self._Host, int(self._Port), family=socket.AF_INET)
-        self._Logger.info("WebSocketServer started at {}:{}".format(self._Host, self._Port))
+        self._Logger.debug("WebSocketServer started at {}:{}".format(self._Host, self._Port))
 
     async def stopWebSocketServer(self):
         """停止 WebSocket 服务器并清理资源。"""
@@ -319,7 +323,7 @@ class WebSocketServer:
             await self._Server.wait_closed()
         for ws in self._Clients.values():
             await ws.close()
-        self._Logger.info("WebSocket server is turned off.")
+        self._Logger.debug("WebSocket server is turned off.")
         self._Clients.clear()
         self.IsClosed = True
 
@@ -334,7 +338,7 @@ class WebSocketServer:
         client = self._Clients.get(client_id)
         if client:
             await client.send(message)
-            self._Logger.info(f"WebSocketServer Sent message to {client_id}: {message}")
+            self._Logger.debug(f"WebSocketServer Sent message to {client_id}: {message}")
         else:
             self._Logger.error(f"WebSocketServer No such client: {client_id}")
 
@@ -380,7 +384,7 @@ class WebSocketServer:
                     await self._MsgProcessor(json_msg)
                 self._Logger.info(f"WebSocketServer received message from {client_id}: {msg}")
         except websockets.ConnectionClosed as e:
-            self._Logger.info(f"WebSocketServer connection closed for {client_id}: {e.reason}")
+            self._Logger.debug(f"WebSocketServer connection closed for {client_id}: {e.reason}")
         except Exception as e:
             error_msg = f"WebSocketServer websocket processor error: {e}\n\n{traceback.format_exc()}"
             self._cleanupClient(client_id, ws)
@@ -392,14 +396,14 @@ class WebSocketServer:
             self._Logger.info(f"Client {client_id} already registered. Updating connection.")
             await ws.send(json.dumps({"type": "info", "message": "Already registered. Connection updated."}))
         else:
-            self._Logger.info(f"Client {client_id} registered successfully.")
+            self._Logger.debug(f"Client {client_id} registered successfully.")
             await ws.send(json.dumps({"type": "info", "message": "Registered successfully."}))
         self._Clients[client_id] = ws
 
     async def _unregisterClient(self, client_id, ws):
         if client_id in self._Clients:
             del self._Clients[client_id]
-            self._Logger.info(f"Client {client_id} unregistered successfully.")
+            self._Logger.debug(f"Client {client_id} unregistered successfully.")
             await ws.send(json.dumps({"type": "info", "message": "Unregistered successfully."}))
         else:
             self._Logger.error(f"Attempted to unregister non-existent client: {client_id}")
@@ -409,12 +413,12 @@ class WebSocketServer:
         """如果客户端已注册，注销并关闭其WebSocket连接"""
         if client_id and client_id in self._Clients:
             self._unregisterClient(client_id, ws)
-            self._Logger.info(f"WebSocketServer cleaned up for {client_id}")
+            self._Logger.debug(f"WebSocketServer cleaned up for {client_id}")
 
 
 class WebSocketClient:
     """
-    TheSeed WebSocket 客户端
+    TheSeedCore WebSocket 客户端
 
     参数:
         :param ClientID : 客户端标识。
@@ -454,7 +458,7 @@ class WebSocketClient:
         try:
             self._Connection = await websockets.connect(self._Url, ssl=ssl_context)
             self._IsConnected = True
-            self._Logger.info(f"WebSocketClient {self._ClientID} connected to {self._Url}")
+            self._Logger.debug(f"WebSocketClient {self._ClientID} connected to {self._Url}")
             await self._Connection.send(json.dumps({"ClientID": self._ClientID, "type": "register"}))
             asyncio.ensure_future(self._sendMsgLoop())
             if self._ReceiveHandler:
@@ -490,7 +494,7 @@ class WebSocketClient:
                 return
             try:
                 await self._Connection.send(msg)
-                self._Logger.info(f"WebSocketClient {self._ClientID} sent message: {msg}")
+                self._Logger.debug(f"WebSocketClient {self._ClientID} sent message: {msg}")
             except Exception as e:
                 self._Logger.error(f"WebSocketClient {self._ClientID} send message failed: {e}")
                 await self._MsgQueue.put(msg)
@@ -504,6 +508,6 @@ class WebSocketClient:
                 msg = await self._Connection.recv()
                 if self._ReceiveHandler:
                     await self._ReceiveHandler(msg)
-                self._Logger.info(f"WebSocketClient {self._ClientID} receive message: {msg}")
+                self._Logger.debug(f"WebSocketClient {self._ClientID} receive message: {msg}")
             except Exception as e:
                 self._Logger.error(f"WebSocketClient {self._ClientID} receive message failed : {e}")

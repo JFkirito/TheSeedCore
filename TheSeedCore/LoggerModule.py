@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TheSeed Logging Module
+TheSeedCore Logging Module
 
 # This module provides advanced logging functionalities tailored for applications, supporting features like color coding of logs,
 # file saving, and toggling of debug modes. It is designed to enhance diagnostic and tracking capabilities efficiently, making it
@@ -31,57 +31,33 @@ TheSeed Logging Module
 
 from __future__ import annotations
 
-__all__ = ["TheSeedCoreLogger", "setDebugMode", "setAllDebugMode"]
+__all__ = [
+    "TheSeedCoreLogger",
+    "setDebugMode",
+    "setAllDebugMode"
+]
 
 import logging
 import os
 from logging.handlers import TimedRotatingFileHandler
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from colorama import Fore, Style
 
 if TYPE_CHECKING:
-    pass
+    from .ConfigModule import LoggerConfig
 
 _LOGGERS = {}
-
-
-def setDebugMode(LoggerName: str, Debug: bool):
-    """
-    设置日志记录器的调试模式。
-
-    参数：
-        :param LoggerName : 日志记录器的名称。
-        :param Debug : 是否启用调试模式。
-    """
-    if LoggerName in _LOGGERS:
-        _LOGGERS[LoggerName].DebugMode = Debug
-
-
-def setAllDebugMode(Debug: bool):
-    """
-    设置所有日志记录器的调试模式。
-
-    参数：
-        :param Debug : 是否启用调试模式。
-    """
-    for logger in _LOGGERS.values():
-        logger.DebugMode = Debug
 
 
 class TheSeedCoreLogger(logging.Logger):
     """
     TheSeedCore日志记录器。
 
-    参数：
-        :param LoggerName : 日志记录器的名称。
-        :param LoggerPath : 日志文件存储的路径。
-        :param BackupCount : 日志文件的备份数量，默认为30。
-        :param Level : 日志的级别，默认为DEBUG。
-        :param Debug : 是否启用调试模式，默认为False。
+    提供具有颜色格式化功能的控制台输出和不带颜色格式化的文件记录功能。
     """
 
-    class _ColoredSyncFormatter(logging.Formatter):
+    class _ColorFormatter(logging.Formatter):
         COLORS = {
             logging.DEBUG: Fore.BLUE,
             logging.INFO: Fore.GREEN,
@@ -95,38 +71,44 @@ class TheSeedCoreLogger(logging.Logger):
             message = super().format(record)
             return f"{color}{Style.BRIGHT}{message}{Style.RESET_ALL}"
 
-    def __new__(cls, LoggerName: str, LoggerPath: str, BackupCount: int = 30, Level: Union[logging.CRITICAL, logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.NOTSET] = logging.DEBUG, Debug: bool = False):
-        if LoggerName in _LOGGERS:
-            return _LOGGERS[LoggerName]
+    class _FileFormatter(logging.Formatter):
+        """
+        文件日志格式器，不包含颜色代码。
+        """
+
+        def format(self, record):
+            message = super().format(record)
+            return message
+
+    def __new__(cls, Config: LoggerConfig):
+        if Config.Name in _LOGGERS:
+            return _LOGGERS[Config.Name]
         else:
             instance = super(TheSeedCoreLogger, cls).__new__(cls)
-            _LOGGERS[LoggerName] = instance
+            _LOGGERS[Config.Name] = instance
             return instance
 
-    def __init__(self, LoggerName: str, LoggerPath: str, BackupCount: int = 30, Level: Union[logging.CRITICAL, logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.NOTSET] = logging.DEBUG, Debug: bool = False):
-        if not hasattr(self, '_initialized'):
-            super().__init__(LoggerName, Level)
-            self._LoggerPath = LoggerPath
-            self._Debug = Debug
-            self._StreamProcessor = None
-            self._StreamFormatter = None
+    def __init__(self, Config: LoggerConfig):
+        super().__init__(Config.Name, Config.Level)
+        self._LoggerPath = Config.Path
+        self._Debug = Config.Debug
 
-            try:
-                if not os.path.exists(self._LoggerPath):
-                    os.makedirs(self._LoggerPath)
-            except Exception as e:
-                raise RuntimeError(f"Error creating sync log path: {e}")
+        if not os.path.exists(self._LoggerPath):
+            os.makedirs(self._LoggerPath)
 
-            self._LogFile = os.path.join(self._LoggerPath, f"{LoggerName}.log")
-            self._FileProcessor = TimedRotatingFileHandler(self._LogFile, when="midnight", interval=1, backupCount=BackupCount, encoding="utf-8")
-            self._FileProcessor.suffix = "%Y-%m-%d"
-            self._FileProcessor.setLevel(Level)
-            self._Formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            self._FileProcessor.setFormatter(self._Formatter)
-            self.addHandler(self._FileProcessor)
+        self._LogFile = os.path.join(self._LoggerPath, f"{Config.Name}.log")
+        self._FileProcessor = TimedRotatingFileHandler(self._LogFile, when="midnight", interval=1, backupCount=Config.BackupCount, encoding="utf-8")
+        self._FileProcessor.suffix = "%Y-%m-%d"
+        self._FileProcessor.setLevel(Config.Level if Config.Debug else max(Config.Level, logging.WARNING))
+        self._FileFormatter = self._FileFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self._FileProcessor.setFormatter(self._FileFormatter)
+        self.addHandler(self._FileProcessor)
 
-            self._updateConsoleHandler()
-            self._initialized = True
+        self._StreamProcessor = logging.StreamHandler()
+        self._ConsoleFormatter = self._ColorFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self._StreamProcessor.setLevel(logging.DEBUG if Config.Debug else max(Config.Level, logging.WARNING))
+        self._StreamProcessor.setFormatter(self._ConsoleFormatter)
+        self.addHandler(self._StreamProcessor)
 
     @property
     def DebugMode(self):
@@ -136,18 +118,29 @@ class TheSeedCoreLogger(logging.Logger):
     def DebugMode(self, value):
         if self._Debug != value:
             self._Debug = value
-            self._updateConsoleHandler()
+            new_level = logging.DEBUG if self._Debug else max(self.level, logging.WARNING)
+            self._FileProcessor.setLevel(new_level)
+            self._StreamProcessor.setLevel(new_level)
 
-    def _updateConsoleHandler(self):
-        if self._Debug:
-            if not self._StreamProcessor:
-                self._StreamProcessor = logging.StreamHandler()
-                self._StreamFormatter = self._ColoredSyncFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-                self._StreamProcessor.setLevel(self.level)
-                self._StreamProcessor.setFormatter(self._StreamFormatter)
-                self.addHandler(self._StreamProcessor)
-        else:
-            if self._StreamProcessor and self._StreamProcessor in self.handlers:
-                self.removeHandler(self._StreamProcessor)
-                self._StreamProcessor = None
-                self._StreamFormatter = None
+
+def setDebugMode(name: str, debug: bool):
+    """
+    设置日志记录器的调试模式。
+
+    参数：
+        :param name : 日志记录器的名称。
+        :param debug : 是否启用调试模式。
+    """
+    if name in _LOGGERS:
+        _LOGGERS[name].DebugMode = debug
+
+
+def setAllDebugMode(debug: bool):
+    """
+    设置所有日志记录器的调试模式。
+
+    参数：
+        :param debug : 是否启用调试模式。
+    """
+    for logger in _LOGGERS.values():
+        logger.DebugMode = debug

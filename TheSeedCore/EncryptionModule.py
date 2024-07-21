@@ -1,44 +1,49 @@
 # -*- coding: utf-8 -*-
 """
-TheSeed Encryption Module
+TheSeedCore Encryption Module
 
-# This module provides a comprehensive suite of tools for data encryption and decryption, supporting AES and RSA algorithms.
-# It includes classes for performing encryption operations and managing multiple encryptor instances. This module is essential
-# for applications requiring secure data handling and communication.
-#
+# This module handles various encryption and decryption processes to ensure data security across TheSeed applications.
+# It supports both symmetric (AES) and asymmetric (RSA) encryption methods.
+# The module is designed to be flexible, allowing for easy integration and secure data handling within different parts of the system.
+
 # Key Components:
-# 1. TheSeedEncryptor: Handles AES encryption/decryption and RSA key pair generation, securely managing keys via a keyring.
-# 2. EncryptorManager: Manages multiple TheSeedEncryptor instances, allowing flexible encryption configurations within the application.
-#
+# 1. TheSeedEncryptor: Manages AES encryption and decryption processes, including key management and storage using the keyring system.
+# 2. EncryptorManager: A singleton manager that maintains a registry of TheSeedEncryptor instances, facilitating easy access and management of multiple encryptors across the application.
+
 # Module Functions:
-# - Enables AES encryption and decryption of strings.
-# - Supports RSA key pair generation with key import/export capabilities.
-# - Facilitates encrypted data storage and retrieval, enhancing local security for keys and sensitive data.
-# - Integrates detailed logging for tracking encryption and decryption processes, aiding in security audits and troubleshooting.
-#
+# - Provides AES encryption and decryption functionalities with secure key storage.
+# - Supports RSA key pair generation, encryption, and decryption.
+# - Ensures secure and efficient management of encryption keys through integration with the system's keyring.
+# - Offers utility functions for loading and storing RSA keys in local storage, encrypted using AES.
+# - Centralized management of encryptors through the EncryptorManager, allowing for scalable encryption solutions across applications.
+
 # Usage Scenarios:
-# - Encrypting sensitive data for secure storage or transmission in applications.
-# - Securing communication between server and client through RSA public key encryption.
-# - Locally storing keys or sensitive information with enhanced security.
-#
+# - Encrypting sensitive data before storage or transmission to ensure confidentiality and data integrity.
+# - Generating RSA keys for secure data exchange or digital signatures in applications requiring high-security measures.
+# - Utilizing the manager to handle multiple encryptors for different parts of an application, simplifying the management and scalability of encryption tasks.
+
 # Dependencies:
-# - Crypto.Cipher: Implements AES and RSA encryption algorithms.
-# - keyring: Manages secure storage of encryption keys.
-# - platform, subprocess: Generate system-based key identifiers.
-# - traceback: Captures and logs error information.
-# - LoggerModule: Provides logging capabilities for the module.
+# - cryptography: Provides comprehensive cryptographic library functionalities including symmetric and asymmetric encryption.
+# - keyring: Utilized for storing and retrieving sensitive information securely in the system's key store.
+# - base64: Used for encoding binary data into ASCII characters as part of encryption and decryption processes.
+# - logging: Facilitates logging of operations within the module to aid in debugging and tracking.
+# - traceback: Utilized for detailed error handling and debugging.
 
 """
 
 from __future__ import annotations
 
-__all__ = ["TheSeedEncryptor", "EncryptorManager"]
+__all__ = [
+    "TheSeedCoreEncryptor",
+    "EncryptorManager"
+]
 
 import base64
+import logging
 import platform
 import subprocess
 import traceback
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 import keyring
 from Crypto.Cipher import AES, PKCS1_OAEP
@@ -46,18 +51,16 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 
 if TYPE_CHECKING:
+    from .ConfigModule import EncryptorConfig
     from .LoggerModule import TheSeedCoreLogger
 
 
-class TheSeedEncryptor:
+class TheSeedCoreEncryptor:
     """
-    TheSeed加密器。
+    TheSeedCore 加密器。
 
     参数:
-        :param AESName : Keyring 密钥名称。
-        :param Logger : 日志记录器。
-        :param KeyringIdentifier : Keyring 唯一标识符。
-
+        :param Config : 加密器配置。
     属性:
         - _AESName : AES密钥名称。
         - _Logger : 日志记录器。
@@ -65,10 +68,10 @@ class TheSeedEncryptor:
         - _AESKey : AES 密钥。
     """
 
-    def __init__(self, AESName: str, Logger: TheSeedCoreLogger, KeyringIdentifier: str = None):
-        self._AESName = AESName
-        self._Logger = Logger
-        self._KeyringIdentifier = self._generateKeyringIdentifier() if KeyringIdentifier is None else KeyringIdentifier
+    def __init__(self, Config: EncryptorConfig):
+        self._AESName = Config.AESName
+        self._Logger = Config.Logger
+        self._KeyringIdentifier = self._generateKeyringIdentifier() if Config.KeyringIdentifier is None else Config.KeyringIdentifier
         self._AESKey = self._loadAESKey()
 
     def aesEncrypt(self, data: str) -> str:
@@ -251,7 +254,7 @@ class TheSeedEncryptor:
         从 keyring 中加载 AES 密钥，如果不存在则生成新密钥并存储。
 
         返回:
-            - AES 密钥。
+            :return : AES 密钥。
         """
         try:
             encoded_key = keyring.get_password(self._KeyringIdentifier, self._AESName)
@@ -264,7 +267,6 @@ class TheSeedEncryptor:
         except Exception as e:
             error_msg = f"TheSeedEncryptor load aes key error : {e}\n\n{traceback.format_exc()}"
             self._Logger.error(error_msg)
-            raise e
 
     def _saveAESKey(self, key):
         """
@@ -283,7 +285,7 @@ class TheSeedEncryptor:
 
 class EncryptorManager:
     """
-    TheSeed加密管理器。
+    TheSeedCore 加密管理器。
 
     参数:
         :param Logger : 日志记录器。
@@ -296,40 +298,34 @@ class EncryptorManager:
 
     _INSTANCE: EncryptorManager = None
 
-    def __new__(cls, Logger: TheSeedCoreLogger):
+    def __new__(cls, Logger: Union[TheSeedCoreLogger, logging.Logger]):
+        if Logger is None:
+            raise ValueError("EncryptorManager init error : Logger cannot be None.")
         if cls._INSTANCE is None:
             cls._INSTANCE = super(EncryptorManager, cls).__new__(cls)
         return cls._INSTANCE
 
-    def __init__(self, Logger: TheSeedCoreLogger):
+    def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger]):
         self._EncryptorDict: dict = {}
         self._Logger = Logger
 
-    def createEncryptor(self, encryptor_name: str, aes_name: str, keyring_identifier: str) -> bool:
+    def createEncryptor(self, encryptor_name: str, config: EncryptorConfig) -> bool:
         """
         创建一个新的加密器实例并存储在字典中。
 
         参数:
             :param encryptor_name : 加密器名。
-            :param aes_name: 用于检索或存储 AES 密钥的标识符。
-            :param keyring_identifier: 用于生成唯一标识符的标识符。
+            :param config : 加密器配置。
         返回:
-            :return 参数不正确时返回 False, 创建成功则返回True。
+            :return 是否成功创建加密器。
         """
-
-        if not isinstance(encryptor_name, str):
-            self._Logger.error(f"EncryptionManager create encryptor parameter error : encryptor name must be a string.")
+        if encryptor_name in self._EncryptorDict:
+            self._Logger.warning(f"EncryptionManager create encryptor warning : encryptor {encryptor_name} already exists.")
             return False
-        if not isinstance(aes_name, str):
-            self._Logger.error(f"EncryptionManager create encryptor parameter error : keyring name must be a string.")
-            return False
-        if not isinstance(keyring_identifier, str):
-            self._Logger.error(f"EncryptionManager create encryptor parameter error : keyring identifier must be a string.")
-            return False
-        self._EncryptorDict[encryptor_name] = TheSeedEncryptor(aes_name, self._Logger, keyring_identifier)
+        self._EncryptorDict[encryptor_name] = TheSeedCoreEncryptor(config)
         return True
 
-    def getEncryptor(self, encryptor_name: str) -> TheSeedEncryptor | None:
+    def getEncryptor(self, encryptor_name: str) -> TheSeedCoreEncryptor | None:
         """
         根据加密器名获取对应的加密器实例。
 
@@ -364,7 +360,7 @@ class EncryptorManager:
         if not isinstance(data, str):
             self._Logger.error(f"EncryptionManager aes encrypt data parameter error : data must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "aesEncryptData"):
             return encryptor.aesEncrypt(data)
         else:
@@ -388,7 +384,7 @@ class EncryptorManager:
         if not isinstance(data, str):
             self._Logger.error(f"EncryptionManager decrypt data parameter error : data must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "aesDecryptData"):
             return encryptor.aesDecrypt(data)
         else:
@@ -421,7 +417,7 @@ class EncryptorManager:
         if not isinstance(encryptor_name, str):
             self._Logger.error(f"EncryptionManager generating rsa keys parameter error : encryptor name must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "generateRSAKeys"):
             return encryptor.generateRSAKeys(private_path, public_path, key_size, store_locally)
         else:
@@ -441,7 +437,7 @@ class EncryptorManager:
         if not isinstance(encryptor_name, str):
             self._Logger.error(f"EncryptionManager load private key parameter error : encryptor name must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "loadRSAPrivateKey"):
             return encryptor.loadRSAPrivateKey(private_path)
         else:
@@ -461,7 +457,7 @@ class EncryptorManager:
         if not isinstance(encryptor_name, str):
             self._Logger.error(f"EncryptionManager load public key parameter error : encryptor name must be a string.")
             return
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "loadRSAPublicKey"):
             return encryptor.loadRSAPublicKey(public_path)
         else:
@@ -482,7 +478,7 @@ class EncryptorManager:
         if not isinstance(encryptor_name, str):
             self._Logger.error(f"EncryptionManager rsa encrypt parameter error : encryptor name must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "rsaEncrypt"):
             return encryptor.rsaEncrypt(public_key, data)
         else:
@@ -503,7 +499,7 @@ class EncryptorManager:
         if not isinstance(encryptor_name, str):
             self._Logger.error(f"EncryptionManager rsa decrypt parameter error : encryptor name must be a string.")
             return None
-        encryptor: TheSeedEncryptor = self.getEncryptor(encryptor_name)
+        encryptor: TheSeedCoreEncryptor = self.getEncryptor(encryptor_name)
         if encryptor and hasattr(encryptor, "rsaDecrypt"):
             return encryptor.rsaDecrypt(private_key, encrypted_data)
         else:

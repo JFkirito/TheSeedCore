@@ -2,14 +2,13 @@
 """
 TheSeed External Services Module
 
-
 # This module specializes in managing and operating external services, with a focus on Node.js-related functionalities.
 # It offers tools for installing Node.js packages and managing Node.js application services, making it ideal for environments
 # that require integration with Node.js, such as launching Node.js-based API services or managing Node.js tools and libraries.
 
 # Key Components:
 # 1. NodeService: Manages the installation of Node.js packages and the starting/stopping of Node.js application services.
-#    It performs service operations asynchronously using subprocesses and threads, and includes integrated logging for tracking operations.
+# It performs service operations asynchronously using subprocesses and threads, and includes integrated logging for tracking operations.
 
 # Module Functions:
 # - Installs Node.js packages to a specified path.
@@ -34,10 +33,11 @@ from __future__ import annotations
 
 __all__ = ["NodeService"]
 
+import logging
 import os
 import subprocess
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from .LoggerModule import TheSeedCoreLogger
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 class NodeService:
     """
-    TheSeed NodeService 管理 Node.js 包的安装和服务的启动和停止。
+    TheSeedCore NodeService 管理 Node.js 包的安装和服务的启动和停止。
 
     参数:
         :param DefaultInstallPath : 默认的 Node.js 包安装路径。
@@ -63,12 +63,12 @@ class NodeService:
     """
     _INSTANCE = None
 
-    def __new__(cls, DefaultInstallPath: str, Logger: TheSeedCoreLogger):
+    def __new__(cls, DefaultInstallPath: str, Logger: Union[TheSeedCoreLogger, logging.Logger]):
         if cls._INSTANCE is None:
             cls._INSTANCE = super(NodeService, cls).__new__(cls)
         return cls._INSTANCE
 
-    def __init__(self, DefaultInstallPath: str, Logger: TheSeedCoreLogger):
+    def __init__(self, DefaultInstallPath: str, Logger: Union[TheSeedCoreLogger, logging.Logger]):
         self._DefaultInstallPath = DefaultInstallPath
         self._Logger = Logger
         self._InstallPackageSubProcess = None
@@ -186,7 +186,7 @@ class NodeService:
             self._ServiceSubProcess.clear()
             self._ServiceThread.clear()
             self.IsClosed = True
-            self._Logger.info("NodeService stop all service success : all services have been stopped")
+            self._Logger.debug("NodeService all services has been stopped.")
         except Exception as e:
             self._Logger.error(f"NodeService stop all service error : {str(e)}")
 

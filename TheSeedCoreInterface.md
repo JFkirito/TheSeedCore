@@ -15,7 +15,6 @@ print(TheSeed.getHttpServerAddress())
 ```
 class CustomModels(TheSeed):
     def __init__(self)
-        super().__init__()
 ```
 
 ## TheSeed
@@ -67,9 +66,6 @@ class CustomModels(TheSeed):
 - **`BasicRedisDatabaseLogger`**：默认 Redis 数据库日志记录器。
 
 
-- **`BasicThreadPoolLogger`**：默认线程池日志记录器。
-
-
 - **`BasicNetworkServicesLogger`**：默认网络服务日志记录器。
 
 
@@ -82,7 +78,7 @@ class CustomModels(TheSeed):
 - **`BasicDatabaseManager`**：TheSeedCore SQLite 数据库管理器。
 
 
-- **`BasicThreadPool`**：TheSeedCore 线程池。
+- **`ConcurrencySystem`**：TheSeedCore 并发系统。
 
 
 - **`EncryptorManager`**：加密器管理器。
@@ -104,74 +100,28 @@ class CustomModels(TheSeed):
 
 ### **接口**
 
-- **`commandProcessor`**
-  - 命令处理器，用于处理命令行参数，可以继承TheSeed重写该接口。
+- **`submitProcessTask`**
+    - 提交进程任务
 
-- **`setTaskThreshold`**
-    - 运行时设置线程池的任务阈值，仅在开启负载均衡时有效。
-
-    - **参数**：
-        - `task_threshold`（必要）`int` ：任务阈值。
-
-    ```
-    TheSeed.setTaskThreshold(15)
-    ```
-
-- **`setPerformanceMode`**
-  - 设置 TheSeedCore 的性能模式。
-
-  - **参数**：
-      - `performance_mode`（必要）`bool` ：性能模式，只接受`HighestPerformance`，`Balance`，`LowPerformance`，仅在不指定 `total_thread_count` 时有效。
-
-  ```
-  TheSeed.setPerformanceMode(15)
-  ```
-
-- **`addSyncTask`**
-  - 添加同步任务。
-
-  - **参数**：
-      - `task`（必要）`Callable[..., Any]`：任务函数。
-      - `callback`（可选）`Optional[Callable[[Any], Any]]`：任务完成时的回调函数。
-      - `thread_label`（可选）`str`：线程标签。
-      - `lock`（可选）`bool`：是否加锁，默认为 False。
-      - `*args`（可选）：任务函数的位置参数。
-      - `**kwargs`（可选）：任务函数的关键字参数。
-
-  ```
-  def sync_function(value:str):
-      return value
+   ```
+    def testFunc():
+        print("This is a process test function")
   
-  def sync_function_callback(result):
-      print(result)
-  
-  TheSeed.addSyncTask(sync_function, sync_function_callback, None, False, value="This is TheSeedCore sync task demo")
-  ```
+    TheSeed.submitProcessTask(testFunc)
+   ```
 
-- **`addAsyncTask`**
-  - 添加异步任务。
+- **`submitThreadTask`**
+    - 提交线程任务
 
-  - **参数**：
-      - `task`（必要）`Callable[..., Coroutine[Any, Any, Any]]`：任务函数，必须是异步函数。
-      - `callback`（可选）`Optional[Callable[[Any], Any]]`：任务完成时的回调函数。
-      - `thread_label`（可选）`str`：线程标签。
-      - `lock`（可选）`bool`：是否加锁，默认为 False。
-      - `*args`（可选）：任务函数的位置参数。
-      - `**kwargs`（可选）：任务函数的关键字参数。
-
-  ```
-  async def async_function(value:str):
-      await asyncio.sleep(1)
-      return value
+   ```
+    def testFunc():
+        print("This is a thread test function")
   
-  def async_function_callback(result):
-      print(result)
-  
-  TheSeed.addAsyncTask(async_function, async_function_callback, None, False, value="This is TheSeedCore async task demo")
-  ```
+    TheSeed.submitThreadTask(testFunc)
+   ```
 
 - **`startHttpServer`**
-  - 启动 TheSeedCore HTTP服务器快捷接口
+    - 启动 TheSeedCore HTTP服务器快捷接口
 
   ```
   TheSeed.startHttpServer()
@@ -179,21 +129,21 @@ class CustomModels(TheSeed):
   ```
 
 - **`stopHttpServer`**
-  - 停止 TheSeedCore HTTP服务器快捷接口
+    - 停止 TheSeedCore HTTP服务器快捷接口
 
   ```
   TheSeed.stopHttpServer()
   ```
 
 - **`getHttpServerAddress`**
-  - 获取 TheSeedCore HTTP 服务器地址快捷接口
+    - 获取 TheSeedCore HTTP 服务器地址快捷接口
 
   ```
   print(TheSeed.getHttpServerAddress())
   ```
 
 - **`startWebSocketServer`**
-  - 启动 TheSeedCore WebSocket 服务器快捷接口
+    - 启动 TheSeedCore WebSocket 服务器快捷接口
 
   ```
   TheSeed.startWebSocketServer()
@@ -201,7 +151,7 @@ class CustomModels(TheSeed):
   ```
 
 - **`stopWebSocketServer`**
-  - 停止 TheSeedCore WebSocket 服务器快捷接口
+    - 停止 TheSeedCore WebSocket 服务器快捷接口
 
   ```
   TheSeed.stopWebSocketServer()
@@ -209,7 +159,7 @@ class CustomModels(TheSeed):
   ```
 
 - **`getWebSocketServerAddress`**
-  - 获取 TheSeedCore WebSocket 服务器地址快捷接口
+    - 获取 TheSeedCore WebSocket 服务器地址快捷接口
 
   ```
   print(TheSeed.getWebSocketServerAddress())
@@ -1104,103 +1054,61 @@ class CustomModels(TheSeed):
     TheSeed.RedisDatabaseManager.closeAllDatabase()
     ```
 
-## ThreadPoolModule
+## ConcurrencySystemModule
 
-### `_SyncTaskLock` - 全局同步任务锁
+### `TheSeedCoreConcurrencySystem` - TheSeedCore 并发系统
 
-### `_AsyncTaskLock` - 全局异步任务锁
+- **此类为单例模式，在TheSeedCore启动时会自动创建，您可以在任何地方直接调用 `TheSeed`.`CoreConcurrencySystem` 使用TheSeedCore的并发系统**
 
-### `TheSeedThreadPool` - TheSeedCore 线程池
-
-- **此类为单例模式，在TheSeedCore启动时会自动创建，您可以在任何地方直接调用 `TheSeed`.`TheSeedThreadPool` 使用TheSeedCore的线程池**
-
-
-- **`addSyncTask`** - 添加同步任务
+- **`submitProcessTask`** - 添加任务到进程
     - **参数**：
         - `task`（必要）`Callable[..., Any]` ：任务函数。
-        - `callback`（可选）`Optional[Callable[[Any], Any]]` ：回调函数。
-        - `thread_label`（可选）`str` ：线程标签。
-        - `lock`（可选）`bool` ：是否加锁，默认为 True。
+        - `priority`（可选）`int` ：任务优先级。
+        - `Callback`（可选）`callable` ：回调函数。
+        - `Lock`（可选）`bool` ：是否加锁，默认为 False。
+        - `MaximumLockHoldingTime`（可选）`int` ：最大锁持有时间，默认为 3。
+        - `GpuBoost`（可选）`bool` ：是否启用GPU加速，默认为 False。只有在安装了PyTorch的情况下才会生效。
+        - `ReTry`（可选）`int` ：任务如果失败是否重试，默认为False。
+        - `MaxRetries`（可选）`int` ：最大重试次数，默认为 3。
         - `args`（可选）`Any` ：任务位置参数。
         - `kwargs`（可选）`Any` ：任务关键字参数。
 
     ```
     from TheSeedCore import *
   
-    def sync_task():
-        print("This is TheSeedCore sync task")
+    def testFunc():
+        print("This is TheSeedCore test task")
   
-    TheSeed.TheSeedThreadPool.addSyncTask(sync_task)
+    TheSeed.ConcurrencySystem.submitProcessTask(testFunc)
     ```
 
-- **`addAsyncTask`** - 添加异步任务
+- **`submitThreadTask`** - 添加任务到线程
     - **参数**：
-        - `task`（必要）`Callable[..., Coroutine[Any, Any, Any]]` ：任务函数。
-        - `callback`（可选）`Optional[Callable[[Any], Any]]` ：回调函数。
-        - `thread_label`（可选）`str` ：线程标签。
-        - `lock`（可选）`bool` ：是否加锁，默认为 True。
+        - `task`（必要）`Callable[..., Any]` ：任务函数。
+        - `priority`（可选）`int` ：任务优先级。
+        - `Callback`（可选）`callable` ：回调函数。
+        - `Lock`（可选）`bool` ：是否加锁，默认为 False。
+        - `MaximumLockHoldingTime`（可选）`int` ：最大锁持有时间，默认为 3。
+        - `GpuBoost`（可选）`bool` ：是否启用GPU加速，默认为 False。只有在安装了PyTorch的情况下才会生效。
+        - `ReTry`（可选）`int` ：任务如果失败是否重试，默认为False。
+        - `MaxRetries`（可选）`int` ：最大重试次数，默认为 3。
         - `args`（可选）`Any` ：任务位置参数。
         - `kwargs`（可选）`Any` ：任务关键字参数。
 
     ```
     from TheSeedCore import *
   
-    async def async_task():
-        print("This is TheSeedCore async task")
+    def testFunc():
+        print("This is TheSeedCore test task")
   
-    TheSeed.TheSeedThreadPool.addAsyncTask(async_task)
+    TheSeed.ConcurrencySystem.submitThreadTask(testFunc)
     ```
 
-- **`createSyncThread`** - 创建同步线程
-    - **参数**：
-        - `thread_label`（必要）`str` ：线程标签。
+- **`closeConcurrencySystem`** - 关闭并发系统
     ```
     from TheSeedCore import *
   
-    TheSeed.TheSeedThreadPool.createSyncThread("custom_thread")
-    ```
-
-- **`createAsyncThread`** - 创建异步线程
-    - **参数**：
-        - `thread_label`（必要）`str` ：线程标签。
-    ```
-    from TheSeedCore import *
-  
-    TheSeed.TheSeedThreadPool.createAsyncThread("custom_thread")
-    ```
-
-- **`getSyncThreadCount`** - 获取同步线程数量
-    - **返回**：
-        - `int`：线程数量。
-    ```
-    from TheSeedCore import *
-  
-    thread_count = TheSeed.TheSeedThreadPool.getSyncThreadCount()
-    ```
-
-- **`getAsyncThreadCount`** - 获取异步线程数量
-    - **返回**：
-        - `int`：线程数量。
-    ```
-    from TheSeedCore import *
-  
-    thread_count = TheSeed.TheSeedThreadPool.getAsyncThreadCount()
-    ```
-
-- **`loadBalancingSwitch`** - 负载均衡开关
-    - **参数**：
-        - `switch`（必要）`bool` ：开关状态。
-    ```
-    from TheSeedCore import *
-  
-    TheSeed.TheSeedThreadPool.loadBalancingSwitch(True)
-    ```
-
-- **`closeThreadPool`** - 关闭线程池
-    ```
-    from TheSeedCore import *
-  
-    TheSeed.TheSeedThreadPool.closeThreadPool()
+    TheSeed.CoreConcurrencySystem.closeConcurrencySystem()
     ```
 
 ## NetworkModule
