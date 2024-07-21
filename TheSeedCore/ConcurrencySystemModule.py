@@ -662,7 +662,10 @@ class _ProcessObject:
         使用psutil库来获取CPU和内存使用率，并计算加权负载。
         """
         psutil_object = psutil.Process(self._Process.pid)
-        cpu_usage = psutil_object.cpu_percent(interval=0.1) / psutil.cpu_count(logical=False)
+        try:
+            cpu_usage = psutil_object.cpu_percent(interval=0.1) / psutil.cpu_count(logical=False)
+        except psutil.NoSuchProcess:
+            cpu_usage = 0
         memory_usage = psutil_object.memory_percent()
         weighted_load = (cpu_usage * 5) + (memory_usage * 5)
         return min(max(weighted_load, 0), 100)
