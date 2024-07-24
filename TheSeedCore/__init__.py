@@ -53,7 +53,7 @@ from .NetworkModule import *
 if TYPE_CHECKING:
     pass
 
-__Version__ = "0.0.5"
+__Version__ = "0.0.6"
 
 
 class TheSeed:
