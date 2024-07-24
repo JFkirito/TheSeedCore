@@ -46,7 +46,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from itertools import count
-from typing import TYPE_CHECKING, Union, Literal
+from typing import TYPE_CHECKING, Union, Literal, List
 
 import psutil
 
@@ -66,11 +66,11 @@ try:
         _PyTorchSupport = True
         print(f"\033[92mTheSeedCore Concurrency System - Process({os.getpid()}) : PyTorch is available and CUDA is available. Allow GPU boost\033[0m")
     else:
-        _PyTorchSupport = False
         print(f"\033[33mTheSeedCore Concurrency System - Process({os.getpid()}) : PyTorch is available but CUDA is not available. GPU boost will be unavailable\033[0m")
+        _PyTorchSupport = False
 except ImportError as PyTorchImportError:
-    _PyTorchSupport = False
     print(f"\033[31mTheSeedCore Concurrency System - Process({os.getpid()}) : {str(PyTorchImportError)}. GPU boost will be unavailable\033[0m")
+    _PyTorchSupport = False
 
 
 class _BaseTaskObject:
@@ -253,6 +253,9 @@ class _AsyncTaskObject(_BaseTaskObject):
                 return await self._retryExecution()
             else:
                 raise Exception(f"TheSeedCore Concurrency System : Failed to execute async task {self.taskName()} due to {str(e)}.")
+        finally:
+            if self.isGpuBoost():
+                self.cleanupGpuResources()
 
     async def _retryExecution(self):
         """
@@ -320,6 +323,9 @@ class _SyncTaskObject(_BaseTaskObject):
                 return self._retryExecution()
             else:
                 raise Exception(f"TheSeedCore Concurrency System : Failed to execute sync task {self.taskName()} due to {str(e)}.")
+        finally:
+            if self.isGpuBoost():
+                self.cleanupGpuResources()
 
     def _retryExecution(self):
         """
@@ -382,6 +388,7 @@ class _BaseThreadObject:
         self._TaskUniqueID = count()
         self._Thread = threading.Thread(target=self._run, daemon=True)
         self._CloseEvent = threading.Event()
+        self._Condition = threading.Condition()
 
     def startThread(self):
         """
@@ -398,6 +405,8 @@ class _BaseThreadObject:
         设置关闭事件，等待线程结束，然后删除线程对象。
         """
         self._CloseEvent.set()
+        with self._Condition:
+            self._Condition.notify_all()
         if self._Thread.is_alive():
             self._Thread.join()
         del self
@@ -409,7 +418,9 @@ class _BaseThreadObject:
         任务被封装为一个元组，包含任务的优先级，唯一标识和任务对象本身。
         """
         task_data = (priority, next(self._TaskUniqueID), task_object)
-        self._TaskQueue.put(task_data)
+        with self._Condition:
+            self._TaskQueue.put(task_data)
+            self._Condition.notify()
 
     def getThreadTaskCount(self):
         """获取任务队列中的任务数量。"""
@@ -455,10 +466,13 @@ class _AsyncThreadObject(_BaseThreadObject):
         循环处理任务队列中的任务，直到接收到线程关闭事件。
         """
         while not self._CloseEvent.is_set():
-            try:
-                item: tuple[int, int, _AsyncTaskObject] = self._TaskQueue.get(block=True, timeout=0.5)
-            except queue.Empty:
-                continue
+            with self._Condition:
+                while self._TaskQueue.empty() and not self._CloseEvent.is_set():
+                    self._Condition.wait()
+                if self._CloseEvent.is_set():
+                    break
+                item: tuple[int, int, _AsyncTaskObject] = self._TaskQueue.get_nowait()
+
             priority, uniqueid, task_object = item
             if task_object.isLock():
                 if self._TaskLock.acquire(timeout=task_object.maximumLockHoldingTime()):
@@ -475,7 +489,7 @@ class _AsyncThreadObject(_BaseThreadObject):
                             pass
                 else:
                     retry_delay = 0.1 * (2 ** task_object.maxRetries())
-                    time.sleep(min(retry_delay, 10))
+                    await asyncio.sleep(min(retry_delay, 10))
                     task_data = (priority, uniqueid, task_object)
                     self._TaskQueue.put(task_data)
             else:
@@ -493,6 +507,8 @@ class _AsyncThreadObject(_BaseThreadObject):
             task_callback = task_object.callback()
             self._CallbackQueue.put(("Callback", task_callback, task_execute_result))
         del task_object
+        del task_execute_result
+        gc.collect()
 
     def _cleanUp(self):
         """
@@ -531,10 +547,16 @@ class _SyncThreadObject(_BaseThreadObject):
 
         尝试从任务队列中获取任务，如果成功则根据任务的锁定状态进行处理。
         """
-        try:
-            item: tuple[int, int, _SyncTaskObject] = self._TaskQueue.get(block=True, timeout=0.5)
-        except queue.Empty:
-            return
+        with self._Condition:
+            while self._TaskQueue.empty() and not self._CloseEvent.is_set():
+                self._Condition.wait()
+            if self._CloseEvent.is_set():
+                return
+            try:
+                item: tuple[int, int, _SyncTaskObject] = self._TaskQueue.get_nowait()
+            except queue.Empty:
+                return
+
         priority, uniqueid, task_object = item
         if task_object.isLock():
             if self._TaskLock.acquire(timeout=task_object.maximumLockHoldingTime()):
@@ -568,6 +590,8 @@ class _SyncThreadObject(_BaseThreadObject):
             task_callback = task_object.callback()
             self._CallbackQueue.put(("Callback", task_callback, task_execute_result))
         del task_object
+        del task_execute_result
+        gc.collect()
 
     def _cleanUp(self):
         """
@@ -602,7 +626,7 @@ class _ProcessObject:
         - _SyncThread: 处理同步任务的线程对象。
     """
 
-    def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger], ProcessID: int, ProcessType: Literal["Core", "Expand"], TaskThreshold: int, CallbackQueue: multiprocessing.Queue, TaskLock: multiprocessing.Lock):
+    def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger], ProcessID: int, ProcessType: Literal["Core", "Expand"], TaskThreshold: int, CallbackQueue: multiprocessing.Queue, TaskLock: multiprocessing.Lock, CpuAffinity=None):
         """
         初始化进程对象。
 
@@ -616,8 +640,10 @@ class _ProcessObject:
         self._CallbackQueue = CallbackQueue
         self._TaskLock = TaskLock
         self._TaskQueue = multiprocessing.Queue()
-        self._Process = multiprocessing.Process(target=self._run)
+        self._Process = multiprocessing.Process(target=self._run, daemon=True)
         self._CloseEvent = multiprocessing.Event()
+        self._PsutilObject = None
+        self._CpuAffinity = CpuAffinity
         self._AsyncThread = None
         self._SyncThread = None
 
@@ -625,10 +651,16 @@ class _ProcessObject:
         """
         启动进程。
 
-        进程开始执行_run方法。
+        启动进程，并设置CPU亲和性，然后启动异步和同步任务处理线程。
         """
         self._Process.start()
+        self._PsutilObject = psutil.Process(self._Process.pid)
         self._Logger.debug(f"{self._ProcessType}Process {self._ProcessID} - ({self._Process.pid}) has been started.")
+
+    def _setCpuAffinity(self):
+        if self._CpuAffinity:
+            self._PsutilObject.cpu_affinity(self._CpuAffinity)
+            self._Logger.debug(f"Set CPU affinity for process {self._Process.pid} to cores {self._CpuAffinity}")
 
     def closeProcess(self):
         """
@@ -661,12 +693,11 @@ class _ProcessObject:
 
         使用psutil库来获取CPU和内存使用率，并计算加权负载。
         """
-        psutil_object = psutil.Process(self._Process.pid)
         try:
-            cpu_usage = psutil_object.cpu_percent(interval=0.1) / psutil.cpu_count(logical=False)
+            cpu_usage = self._PsutilObject.cpu_percent(0.1) / psutil.cpu_count(logical=False)
         except psutil.NoSuchProcess:
             cpu_usage = 0
-        memory_usage = psutil_object.memory_percent()
+        memory_usage = self._PsutilObject.memory_percent()
         weighted_load = (cpu_usage * 5) + (memory_usage * 5)
         return min(max(weighted_load, 0), 100)
 
@@ -689,21 +720,16 @@ class _ProcessObject:
         self._SyncThread.closeThread()
 
     def _run(self):
-        """
-        进程的主执行逻辑。
-
-        处理任务的调度和线程的管理，确保在接收到关闭事件时正确地清理和关闭资源。
-        """
         self._ProcessPID = self._Process.pid
         self._startThread()
         try:
             while not self._CloseEvent.is_set():
-                gc.collect()
                 try:
-                    item: tuple[int, _AsyncTaskObject | _SyncTaskObject] = self._TaskQueue.get(block=True, timeout=0.5)
+                    item: tuple[int, _AsyncTaskObject | _SyncTaskObject] = self._TaskQueue.get(block=False)
+                    priority, task_object = item
                 except queue.Empty:
+                    time.sleep(0.001)
                     continue
-                priority, task_object = item
                 task_type = "Async" if asyncio.iscoroutinefunction(task_object.execute) else "Sync"
                 if task_type == "Async":
                     if self._AsyncThread.getThreadTaskCount() < int(self._TaskThreshold // 2):
@@ -792,7 +818,7 @@ class TheSeedCoreConcurrencySystem:
                 if core_process_count > psutil.cpu_count(logical=False):
                     self.Logger.warning(f"Core process count must be less than or equal to the number of physical CPU cores, using default value {default_value}.")
                     return default_value
-                if core_process_count > default_value:
+                if core_process_count >= default_value:
                     return core_process_count
                 if core_process_count < default_value:
                     return default_value
@@ -1305,12 +1331,12 @@ class TheSeedCoreConcurrencySystem:
         """
         with ThreadPoolExecutor(max_workers=self._Config.CoreProcessCount + self._Config.CoreThreadCount) as executor:
             for process_id in range(self._Config.CoreProcessCount):
-                executor.submit(self._startProcess, process_id)
+                executor.submit(self._startProcess, process_id, [process_id])
             for thread_id in range(self._Config.CoreThreadCount // 2):
                 executor.submit(self._startThread, thread_id)
-        self._LoadBalancerThread.start()
+            self._LoadBalancerThread.start()
 
-    def _startProcess(self, process_id: int):
+    def _startProcess(self, process_id: int, cpu_affinity: List[int]):
         """
         启动一个核心进程。
 
@@ -1321,7 +1347,7 @@ class TheSeedCoreConcurrencySystem:
         2. 启动进程。
         3. 将启动的进程存储在核心进程字典中，以便于管理和监控。
         """
-        process = _ProcessObject(self._Logger, process_id, "Core", self._Config.TaskThreshold, self.CallbackQueue, self._TaskLock)
+        process = _ProcessObject(self._Logger, process_id, "Core", self._Config.TaskThreshold, self.CallbackQueue, self._TaskLock, cpu_affinity)
         process.startProcess()
         self._CoreProcess[process_id] = process
 
@@ -1347,34 +1373,31 @@ class TheSeedCoreConcurrencySystem:
         self._Logger.debug(f"CoreSyncThread {thread_id} has been started.")
 
     def closeConcurrencySystem(self):
-        """
-        关闭并发系统，确保所有资源被适当地清理。
-
-        1. 触发负载均衡器线程的结束事件。
-        2. 等待负载均衡器线程结束。
-        3. 使用线程池并发关闭所有核心和扩展的进程及线程。
-        4. 对每个关闭的线程记录日志，确认它们已经被关闭。
-        """
+        """关闭并发系统，确保所有资源被适当地清理。"""
         self._LoadBalancerThreadEvent.set()
         if self._LoadBalancerThread.is_alive():
             self._LoadBalancerThread.join()
+
+        tasks = []
+
         with ThreadPoolExecutor() as executor:
             for process in self._CoreProcess.values():
-                executor.submit(self._closeProcesses, process)
+                tasks.append(executor.submit(self._closeProcesses, process))
             for process in self._ExpandProcess.values():
-                executor.submit(self._closeProcesses, process)
+                tasks.append(executor.submit(self._closeProcesses, process))
             for thread in self._AsyncCoreThread.values():
-                executor.submit(self._closeThreads, thread)
-                self._Logger.debug(f"CoreAsyncThread {thread.threadID()} has been closed.")
+                tasks.append(executor.submit(self._closeThreads, thread))
             for thread in self._AsyncExpandThread.values():
-                executor.submit(self._closeThreads, thread)
-                self._Logger.debug(f"ExpandAsyncThread {thread.threadID()} has been closed.")
+                tasks.append(executor.submit(self._closeThreads, thread))
             for thread in self._SyncCoreThread.values():
-                executor.submit(self._closeThreads, thread)
-                self._Logger.debug(f"CoreSyncThread {thread.threadID()} has been closed.")
+                tasks.append(executor.submit(self._closeThreads, thread))
             for thread in self._SyncExpandThread.values():
-                executor.submit(self._closeThreads, thread)
-                self._Logger.debug(f"ExpandSyncThread {thread.threadID()} has been closed.")
+                tasks.append(executor.submit(self._closeThreads, thread))
+
+            for future in tasks:
+                future.result()
+
+        self._Logger.debug(f"All processes and threads have been closed.")
 
     @staticmethod
     def _closeProcesses(process: _ProcessObject):
@@ -1429,12 +1452,12 @@ class TheSeedCoreConcurrencySystem:
         6. 根据任务类型分配任务到相应的处理队列。
         """
         while not self._LoadBalancerThreadEvent.is_set():
-            gc.collect()
             self._executionExpandPolicy()
             self._executionShrinkagePolicy()
             try:
-                item: tuple[Literal["Process", "Thread"], int, _AsyncTaskObject | _SyncTaskObject] = self._GlobalTaskQueue.get(block=True, timeout=0.1)
+                item: tuple[Literal["Process", "Thread"], int, _AsyncTaskObject | _SyncTaskObject] = self._GlobalTaskQueue.get(block=False)
             except queue.Empty:
+                time.sleep(0.001)
                 continue
             submit_type, priority, task_object = item
             if submit_type == "Process":
@@ -1474,9 +1497,14 @@ class TheSeedCoreConcurrencySystem:
         core_async_threads_obj = [obj for index, obj in self._AsyncCoreThread.items()]
         core_sync_threads_obj = [obj for index, obj in self._SyncCoreThread.items()]
 
-        current_core_process_total_load = sum([obj.getCurrentProcessLoad() for obj in core_process_obj])
-        current_core_async_thread_total_load = sum([obj.getThreadTaskCount() for obj in core_async_threads_obj])
-        current_core_sync_thread_total_load = sum([obj.getThreadTaskCount() for obj in core_sync_threads_obj])
+        try:
+            current_core_process_total_load = sum([obj.getCurrentProcessLoad() for obj in core_process_obj])
+            current_core_async_thread_total_load = sum([obj.getThreadTaskCount() for obj in core_async_threads_obj])
+            current_core_sync_thread_total_load = sum([obj.getThreadTaskCount() for obj in core_sync_threads_obj])
+        except psutil.NoSuchProcess:
+            current_core_process_total_load = 0
+            current_core_async_thread_total_load = 0
+            current_core_sync_thread_total_load = 0
 
         process_average_load = current_core_process_total_load / len(core_process_obj) if core_process_obj else 0
         async_thread_average_load = current_core_async_thread_total_load / len(core_async_threads_obj) if core_async_threads_obj else 0
@@ -1551,7 +1579,7 @@ class TheSeedCoreConcurrencySystem:
         """
         current_time = time.time()
         process_id = self._generateExpandID("Process")
-        process = _ProcessObject(self._Logger, process_id, "Expand", self._Config.TaskThreshold, self.CallbackQueue, self._TaskLock)
+        process = _ProcessObject(self._Logger, process_id, "Expand", self._Config.TaskThreshold, self.CallbackQueue, self._TaskLock, [process_id])
         process.startProcess()
         self._ExpandProcess[process_id] = process
         self._ExpandProcessKeepAlive[process] = current_time
@@ -1628,9 +1656,14 @@ class TheSeedCoreConcurrencySystem:
         expand_async_threads_obj = [obj for index, obj in self._AsyncExpandThread.items()]
         expand_sync_threads_obj = [obj for index, obj in self._SyncExpandThread.items()]
 
-        idle_process = [obj for obj in expand_process_obj if obj.getProcessTaskCount() == 0]
-        idle_async_threads = [obj for obj in expand_async_threads_obj if obj.getThreadTaskCount() == 0]
-        idle_sync_threads = [obj for obj in expand_sync_threads_obj if obj.getThreadTaskCount() == 0]
+        try:
+            idle_process = [obj for obj in expand_process_obj if obj.getProcessTaskCount() == 0]
+            idle_async_threads = [obj for obj in expand_async_threads_obj if obj.getThreadTaskCount() == 0]
+            idle_sync_threads = [obj for obj in expand_sync_threads_obj if obj.getThreadTaskCount() == 0]
+        except psutil.NoSuchProcess:
+            idle_process = []
+            idle_async_threads = []
+            idle_sync_threads = []
 
         allow_closed_processes = [obj for obj in self._ExpandProcessKeepAlive if time.time() - self._ExpandProcessKeepAlive[obj] >= self._Config.ShrinkagePolicyTimeout]
         allow_closed_async_threads = [obj for obj in self._AsyncExpandThreadKeepAlive if time.time() - self._AsyncExpandThreadKeepAlive[obj] >= self._Config.ShrinkagePolicyTimeout]
@@ -1711,7 +1744,10 @@ class TheSeedCoreConcurrencySystem:
             self._GlobalTaskQueue.put(("Process", priority, task_object))
             return
         if len(idle_core_process) > 1:
-            minimum_load_core_process = min(idle_core_process, key=lambda x: x.getCurrentProcessLoad())
+            try:
+                minimum_load_core_process = min(idle_core_process, key=lambda x: x.getCurrentProcessLoad())
+            except psutil.NoSuchProcess:
+                minimum_load_core_process = idle_core_process[0]
             minimum_load_core_process.addProcessTask(priority, task_object)
             return
         idle_core_process[0].addProcessTask(priority, task_object)

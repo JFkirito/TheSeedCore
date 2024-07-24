@@ -173,11 +173,9 @@ class _TheSeedCore:
     async def _callbackProcessor(cls):
         while not cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.is_set():
             try:
-                task_type, task_object, task_result = cls.THESEED_CORE_INSTANCE.ConcurrencySystem.CallbackQueue.get(block=True, timeout=0.5)
+                task_type, task_object, task_result = cls.THESEED_CORE_INSTANCE.ConcurrencySystem.CallbackQueue.get(block=False)
             except queue.Empty:
-                continue
-            if task_type == "Command":
-                print(task_object)
+                time.sleep(0.001)
                 continue
             if task_type == "Callback":
                 if asyncio.iscoroutinefunction(task_object):
@@ -186,10 +184,10 @@ class _TheSeedCore:
                     task_object(task_result)
                 continue
             if task_type == "Rejected":
-                if asyncio.iscoroutinefunction(task_object):
-                    await task_object()
+                if asyncio.iscoroutinefunction(task_object.execute):
+                    await task_object.execute()
                 else:
-                    task_object()
+                    task_object.execute()
 
     @classmethod
     def _startTheSeed(cls):
@@ -199,6 +197,8 @@ class _TheSeedCore:
             cls.THESEED_CORE_INSTANCE.BasicDatabaseManager.upsertItem("StartTime", str(time.time()))
             cls._setupTheSeedCoreInterface()
             asyncio.set_event_loop(cls.THESEED_CORE_INSTANCE._MainEventLoop)
+            while cls.THESEED_CORE_INSTANCE is not None:
+                break
             cls.THESEED_CORE_INSTANCE.Application = cls.APPLICATION(*cls.ARGS, **cls.KWARGS)
             if cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.is_set():
                 cls._closeTheSeed()
@@ -208,14 +208,14 @@ class _TheSeedCore:
                 cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
             cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
         except (KeyboardInterrupt, SystemExit):
-            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
             cls._closeTheSeed()
+            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
             if cls.THESEED_CORE_INSTANCE._MainEventLoop.is_running():
                 cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
             cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
         except Exception as e:
-            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
             cls._closeTheSeed()
+            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
             if cls.THESEED_CORE_INSTANCE._MainEventLoop.is_running():
                 cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
             cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
@@ -228,8 +228,8 @@ class _TheSeedCore:
     @classmethod
     def _stopTheSeed(cls, result):
         if result:
-            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
             cls._closeTheSeed()
+            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
 
     @classmethod
     def _closeTheSeed(cls):
