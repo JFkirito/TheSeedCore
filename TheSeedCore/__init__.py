@@ -2,58 +2,84 @@
 """
 TheSeedCore Framework
 
-This module serves as the foundation for initializing and configuring the TheSeedCore framework, an
-extensible and modular platform designed to facilitate complex application development. It integrates
-various core components such as concurrency management, configuration handling, database operations,
-encryption functionalities, external service integration, logging, network services, and the initial
-startup process. This design ensures that TheSeedCore is an ideal choice for building efficient,
-secure, and maintainable applications.
+This module serves as the main entry point for the TheSeedCore framework, providing initialization, configuration,
+and control for various system components such as concurrency systems, database management, encryption, logging, and networking services.
 
-Core functionalities:
-- Initializes and configures all components of the framework, setting a robust foundation for application development.
-- Orchestrates the entire application startup process, integrating various system components to work cohesively.
-- Provides centralized management and access points to core functionalities like database interaction, network communication, and task concurrency.
+Classes:
+    - TheSeed:
+        A core class that represents the main interface to the TheSeedCore framework.
+        It provides methods for submitting tasks and accessing various subsystems like HTTP servers, WebSocket servers, database managers, and more.
 
-Key Components:
-- TheSeed: A central class that encapsulates system-level configurations and serves as the interface for application interaction.
-- _TheSeedCore: A private class managing low-level framework operations, ensuring that components like logging, encryption, and concurrency are appropriately configured and launched.
+    - _TheSeedCore:
+        A singleton class responsible for initializing and managing the core components of TheSeedCore.
+        It includes methods for starting and stopping the system, setting up paths, databases, and network services.
+
+Functions:
+    - linkStart:
+        Starts the TheSeedCore framework by setting up the necessary configurations and launching the main application class.
+
+    - linkStop:
+        Stops the TheSeedCore framework gracefully, ensuring all services and resources are properly closed.
 
 Features:
-- Modular Architecture: Ensures that components are loosely coupled yet capable of interacting through well-defined interfaces, allowing for scalable and customizable solutions.
-- Advanced Concurrency System: Manages multiple processes and threads to improve system performance and resource utilization, equipped with load balancing and task prioritization.
-- Comprehensive Database Support: Facilitates data storage and transactions through SQLite and Redis, ensuring data integrity and security.
-- Robust Security Measures: Implements a full suite of encryption solutions, managing keys and providing data protection across the framework.
-- Dynamic Configuration and Service Management: Supports runtime configuration changes and seamless integration of external services like Node.js.
-- Enhanced Networking Capabilities: Offers high-performance HTTP and WebSocket servers, supporting real-time data interaction and scalable network solutions.
-- Detailed Logging and Debugging: Features color-coded logs and file rotation for better traceability and debugging support, enhancing maintenance and development workflows.
+    - PyTorch and CUDA Support:
+        Detects the availability of PyTorch and CUDA for potential GPU acceleration.
 
-Usage:
-This module should be used to initialize the application by invoking the 'linkStart' method with the necessary configuration parameters.
-Upon application termination, 'linkStop' ensures a graceful shutdown and resource cleanup.
+    - Concurrency System:
+        Provides task management for both process and thread-based concurrency.
 
-Ideal for building applications that require high concurrency, secure data operations, real-time communications, and complex logging management.
+    - Database Management:
+        Manages SQLite and Redis databases, with support for encryption and logging.
+
+    - Networking Services:
+        Includes HTTP and WebSocket servers for handling network communications.
+
+    - Logging:
+        Configures and manages logging for various system components, supporting both file and console outputs.
+
+Common Parameters:
+    - Host: The server's host address.
+    - Port: The server's port number.
+    - Logger: A logger instance for recording activities and errors.
+
+This module ensures that all core components are initialized in a proper sequence, providing a seamless and efficient setup for TheSeedCore applications.
 """
+
 from __future__ import annotations
 
+try:
+    # noinspection PyUnresolvedReferences
+    import torch
+
+    if torch.cuda.is_available():
+        _AvailableCUDADevicesID = [cuda_device_id for cuda_device_id in range(torch.cuda.device_count())]
+        _PyTorchSupport = True
+    else:
+        _AvailableCUDADevicesID = []
+        _PyTorchSupport = False
+except ImportError as PyTorchImportError:
+    _AvailableCUDADevicesID = []
+    _PyTorchSupport = False
 import random
 import socket
 import sys
 
 import pyfiglet
-from colorama import init, Fore, Style
 
+from colorama import init, Fore, Style
 from .ConcurrencySystemModule import *
 from .ConfigModule import *
 from .DatabaseModule import *
 from .EncryptionModule import *
 from .ExternalServicesModule import *
 from .LoggerModule import *
+from .KafkaServiceModule import KafkaService
 from .NetworkModule import *
 
 if TYPE_CHECKING:
     pass
 
-__Version__ = "0.0.6"
+__Version__ = "0.0.7"
 
 
 class TheSeed:
@@ -79,9 +105,11 @@ class TheSeed:
     ConcurrencySystem: TheSeedCoreConcurrencySystem
     EncryptorManager: EncryptorManager
     SQLiteDatabaseManager: SQLiteDatabaseManager
+    MySQLDatabaseManager: MySQLDatabaseManager
     RedisDatabaseManager: RedisDatabaseManager
     HttpServer: HTTPServer
     WebSocketServer: WebSocketServer
+    KafkaService: KafkaService
     NodeService: NodeService
     linkStart: classmethod
     linkStop: classmethod
@@ -101,7 +129,7 @@ class _TheSeedCore:
     APPLICATION: type = None
     BASIC_SYSTEM_PATH: str = None
     CONCURRENCY_SYSTEM_CONFIG: ConcurrencySystemConfig = None
-    BANNER_MODE: str = "Solid"
+    BANNER_MODE: Literal["Solid", "Gradient"] = "Solid"
     DEBUG_MODE: bool = False
     ARGS: Union[None, tuple, list] = None
     KWARGS: Union[None, dict] = None
@@ -134,12 +162,14 @@ class _TheSeedCore:
         self.BasicHttpPort: str = ""
         self.BasicWsPort: str = ""
 
-        self.BasicLogger = TheSeedCoreLogger(LoggerConfig("TheSeedLog", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
-        self.BasicEncryptorLogger = TheSeedCoreLogger(LoggerConfig("TheSeedEncryptor", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
-        self.BasicSQLiteDatabaseLogger = TheSeedCoreLogger(LoggerConfig("TheSeedSQLiteDatabase", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
-        self.BasicRedisDatabaseLogger = TheSeedCoreLogger(LoggerConfig("TheSeedRedisDatabase", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
-        self.BasicNetworkServicesLogger = TheSeedCoreLogger(LoggerConfig("TheSeedNetworkServices", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
-        self.BasicExternalServicesLogger = TheSeedCoreLogger(LoggerConfig("TheSeedExternalServices", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreLog", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicEncryptorLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreEncryptor", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicSQLiteDatabaseLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreSQLiteDatabase", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicMySQLDatabaseLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreMySQLDatabase", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicRedisDatabaseLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreRedisDatabase", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicNetworkServicesLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreNetworkServices", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicKafkaServiceLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreKafkaServices", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
+        self.BasicExternalServicesLogger = TheSeedCoreLogger(LoggerConfig("TheSeedCoreExternalServices", self.LogsPath, 30, logging.DEBUG, _TheSeedCore.DEBUG_MODE))
 
         self.BasicEncryptor = TheSeedCoreEncryptor(EncryptorConfig("TheSeedCore", self.BasicEncryptorLogger, None))
         self.BasicDatabaseManager = TheSeedCoreSQLiteDatabase(SQLiteDatabaseConfig("TheSeedCore", self.BasicDatabasePath, self.BasicSQLiteDatabaseLogger, self.BasicEncryptor, True))
@@ -148,9 +178,11 @@ class _TheSeedCore:
         self.ConcurrencySystem = TheSeedCoreConcurrencySystem(_TheSeedCore.CONCURRENCY_SYSTEM_CONFIG)
         self.EncryptorManager = EncryptorManager(self.BasicEncryptorLogger)
         self.SQLiteDatabaseManager = SQLiteDatabaseManager(self.BasicSQLiteDatabaseLogger)
+        self.MySQLDatabaseManager = MySQLDatabaseManager(self.BasicMySQLDatabaseLogger)
         self.RedisDatabaseManager = RedisDatabaseManager(self.BasicRedisDatabaseLogger)
         self.HttpServer = HTTPServer(self.BasicHost, self.BasicHttpPort, self.BasicNetworkServicesLogger)
         self.WebSocketServer = WebSocketServer(self.BasicHost, self.BasicWsPort, self.BasicNetworkServicesLogger)
+        self.KafkaService = KafkaService(self.BasicKafkaServiceLogger)
         self.NodeService = NodeService(self.ExternalServicePath, self.BasicExternalServicesLogger)
 
     @classmethod
@@ -172,33 +204,45 @@ class _TheSeedCore:
     @classmethod
     async def _callbackProcessor(cls):
         while not cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.is_set():
-            try:
-                task_type, task_object, task_result = cls.THESEED_CORE_INSTANCE.ConcurrencySystem.CallbackQueue.get(block=False)
-            except queue.Empty:
-                time.sleep(0.001)
-                continue
-            if task_type == "Callback":
-                if asyncio.iscoroutinefunction(task_object):
-                    await task_object(task_result)
-                else:
-                    task_object(task_result)
-                continue
-            if task_type == "Rejected":
-                if asyncio.iscoroutinefunction(task_object.execute):
-                    await task_object.execute()
-                else:
-                    task_object.execute()
+            tasks = []
+            start_time = time.time()
+
+            while (time.time() - start_time) < 1:
+                try:
+                    task_type, task_object, task_result = cls.THESEED_CORE_INSTANCE.ConcurrencySystem.CallbackQueue.get_nowait()
+                    tasks.append((task_type, task_object, task_result))
+                except queue.Empty:
+                    continue
+
+            for task_type, task_object, task_result in tasks:
+                if task_type == "Callback":
+                    if asyncio.iscoroutinefunction(task_object):
+                        await task_object(task_result)
+                    else:
+                        task_object(task_result)
+                elif task_type == "Rejected":
+                    if asyncio.iscoroutinefunction(task_object.execute):
+                        await task_object.execute()
+                    else:
+                        task_object.execute()
+            await asyncio.sleep(0.1)
 
     @classmethod
     def _startTheSeed(cls):
         try:
             cls._showBanner()
             cls.THESEED_CORE_INSTANCE = _TheSeedCore()
-            cls.THESEED_CORE_INSTANCE.BasicDatabaseManager.upsertItem("StartTime", str(time.time()))
             cls._setupTheSeedCoreInterface()
             asyncio.set_event_loop(cls.THESEED_CORE_INSTANCE._MainEventLoop)
             while cls.THESEED_CORE_INSTANCE is not None:
                 break
+            global _PyTorchSupport
+            if _PyTorchSupport:
+                print(Fore.GREEN + Style.BRIGHT + "PyTorch and CUDA is available, Allow GPU Boost")
+            else:
+                print(Fore.RED + Style.BRIGHT + "PyTorch or CUDA is not available, Deny GPU Boost")
+            cls.THESEED_CORE_INSTANCE.BasicDatabaseManager.upsertItem("StartTime", str(time.time()))
+            print(Fore.MAGENTA + Style.BRIGHT + "Connection completed system standing by...")
             cls.THESEED_CORE_INSTANCE.Application = cls.APPLICATION(*cls.ARGS, **cls.KWARGS)
             if cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.is_set():
                 cls._closeTheSeed()
@@ -208,17 +252,9 @@ class _TheSeedCore:
                 cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
             cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
         except (KeyboardInterrupt, SystemExit):
-            cls._closeTheSeed()
-            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
-            if cls.THESEED_CORE_INSTANCE._MainEventLoop.is_running():
-                cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
-            cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
+            cls._exceptionCloseTheSeed()
         except Exception as e:
-            cls._closeTheSeed()
-            cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
-            if cls.THESEED_CORE_INSTANCE._MainEventLoop.is_running():
-                cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
-            cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
+            cls._exceptionCloseTheSeed()
             raise RuntimeError(f"TheSeed start failed : {str(e)}")
 
     @classmethod
@@ -237,6 +273,14 @@ class _TheSeedCore:
             return
         cls.THESEED_CORE_INSTANCE._cleanup()
         _TheSeedCore.IS_CLOSING = True
+
+    @classmethod
+    def _exceptionCloseTheSeed(cls):
+        cls._closeTheSeed()
+        cls.THESEED_CORE_INSTANCE._AsyncCloseEvent.set()
+        if cls.THESEED_CORE_INSTANCE._MainEventLoop.is_running():
+            cls.THESEED_CORE_INSTANCE._MainEventLoop.stop()
+        cls.THESEED_CORE_INSTANCE._MainEventLoop.close()
 
     def _cleanup(self):
         self.ConcurrencySystem.submitThreadTask(task=self.HttpServer.stopHTTPServer)
@@ -264,8 +308,8 @@ class _TheSeedCore:
             'LogsPath', 'ExternalServicePath', 'Application', 'BasicHost', 'BasicHttpPort', 'BasicWsPort',
             'BasicLogger', 'BasicEncryptorLogger', 'BasicSQLiteDatabaseLogger', 'BasicRedisDatabaseLogger',
             'BasicNetworkServicesLogger', 'BasicExternalServicesLogger', 'BasicEncryptor', 'BasicDatabaseManager',
-            'ConcurrencySystem', 'EncryptorManager', 'SQLiteDatabaseManager', 'RedisDatabaseManager', 'HttpServer',
-            'WebSocketServer', 'NodeService'
+            'ConcurrencySystem', 'EncryptorManager', 'SQLiteDatabaseManager', 'MySQLDatabaseManager', 'RedisDatabaseManager', 'HttpServer',
+            'WebSocketServer', 'KafkaService', 'NodeService'
         ]
 
         for attr in attributes:
@@ -277,7 +321,7 @@ class _TheSeedCore:
     @classmethod
     def _showBanner(cls):
         ft = pyfiglet.Figlet(font="slant", width=200)
-        banner = "T h e S e e d"
+        banner = "T h e S e e d C o r e"
         rendered_banner = ft.renderText(banner)
         if cls.BANNER_MODE == "Gradient":
             colors = [Fore.BLUE, Fore.MAGENTA, Fore.GREEN, Fore.CYAN, Fore.YELLOW, Fore.RED]
@@ -293,8 +337,10 @@ class _TheSeedCore:
             print(Style.BRIGHT + colored_text)
         else:
             print(Fore.MAGENTA + Style.BRIGHT + rendered_banner)
+        url = "https://space.bilibili.com/6440741"
+        text = "B站疾风Kirito"
         print(Fore.MAGENTA + Style.BRIGHT + f"TheSeedCore version: {__Version__}")
-        print(Fore.MAGENTA + Style.BRIGHT + f"Supported by B站疾风Kirito")
+        print(Fore.MAGENTA + Style.BRIGHT + f"Supported by {text} {url}")
 
     @staticmethod
     def _checkFreePorts(num_ports=2, low_range=1024, high_range=65535):

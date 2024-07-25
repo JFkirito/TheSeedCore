@@ -2,33 +2,34 @@
 """
 TheSeedCore Network Services Module
 
-# This module delivers robust implementations for HTTP and WebSocket servers and clients, facilitating the development of network services
-# that support high concurrency and real-time data exchange. It's designed to enable quick setup and management of network communications
-# for various scenarios including API services and real-time interactive applications.
+This module provides networking services, including HTTP and WebSocket servers, as well as a WebSocket client, for TheSeedCore ecosystem.
 
-# Key Components:
-# 1. HTTPServer: Utilizes the aiohttp framework to offer an HTTP server capable of route management, request handling, and dynamic content responses.
-# 2. WebSocketServer: Provides WebSocket services, handling connections, and real-time messaging with clients.
-# 3. WebSocketClient: Allows communication with WebSocket services, supporting message sending and reception.
+Classes:
+    - HTTPServer:
+        A class for creating and managing an HTTP server using aiohttp. It supports adding custom routes and handling HTTP requests.
 
-# Module Functions:
-# - Facilitates the creation and management of HTTP services, including serving static pages and handling API requests.
-# - Manages WebSocket server operations such as starting/stopping the server, and handling client connections and messaging.
-# - Enables WebSocket clients to connect to services, supporting bidirectional communication.
-# - Highly customizable, allowing for the easy addition of new routes and service handlers to meet evolving needs.
+    - WebSocketServer:
+        A WebSocket server class that manages WebSocket connections and broadcasts messages. It supports custom message processors and client registration.
 
-# Usage Scenarios:
-# - Suitable for deploying web services or APIs accessible locally or across networks.
-# - Ideal for applications requiring real-time interactions, like chat applications or live data feeds.
-# - Can function as either server or client in WebSocket communications, facilitating versatile network solutions.
+    - WebSocketClient:
+        A WebSocket client class that connects to a WebSocket server, sends messages, and handles received messages using a custom processor.
 
-# Dependencies:
-# - aiohttp: Empowers the HTTP server component with asynchronous request handling capabilities.
-# - websockets: Provides foundational server and client capabilities for WebSocket communications.
-# - ssl: Ensures secure WebSocket connections.
-# - asyncio: Essential for asynchronous operations, enhancing responsiveness and scalability of network services.
-# - LoggerModule: Integrates logging functionality, crucial for monitoring and troubleshooting network activities.
+Features:
+    - HTTP Server:
+        Provides basic HTTP functionalities such as serving web pages and handling POST requests.
 
+    - WebSocket Server:
+        Manages WebSocket connections, supports client registration, message broadcasting, and custom message handling.
+
+    - WebSocket Client:
+        Connects to a WebSocket server, sends messages through a queue, and receives messages with an optional processor.
+
+Common Parameters:
+    - Host: The server's host address.
+    - Port: The server's port number.
+    - Logger: A logger instance for recording activities and errors.
+
+This module facilitates robust and flexible network communication within TheSeedCore applications, leveraging async operations for high performance.
 """
 
 from __future__ import annotations

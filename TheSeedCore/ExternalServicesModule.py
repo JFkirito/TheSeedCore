@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-TheSeed External Services Module
+TheSeedCore External Services Module
 
 # This module specializes in managing and operating external services, with a focus on Node.js-related functionalities.
 # It offers tools for installing Node.js packages and managing Node.js application services, making it ideal for environments

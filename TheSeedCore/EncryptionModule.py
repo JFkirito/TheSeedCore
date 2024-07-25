@@ -2,33 +2,24 @@
 """
 TheSeedCore Encryption Module
 
-# This module handles various encryption and decryption processes to ensure data security across TheSeed applications.
-# It supports both symmetric (AES) and asymmetric (RSA) encryption methods.
-# The module is designed to be flexible, allowing for easy integration and secure data handling within different parts of the system.
+This module provides encryption and decryption functionalities for TheSeedCore. It includes classes for managing AES and RSA encryption,
+as well as a centralized EncryptorManager for managing multiple encryption instances.
 
-# Key Components:
-# 1. TheSeedEncryptor: Manages AES encryption and decryption processes, including key management and storage using the keyring system.
-# 2. EncryptorManager: A singleton manager that maintains a registry of TheSeedEncryptor instances, facilitating easy access and management of multiple encryptors across the application.
+Classes:
+    - TheSeedCoreEncryptor:
+        Provides methods for AES encryption/decryption and RSA key management. Includes functionalities for key generation, encryption, and decryption.
 
-# Module Functions:
-# - Provides AES encryption and decryption functionalities with secure key storage.
-# - Supports RSA key pair generation, encryption, and decryption.
-# - Ensures secure and efficient management of encryption keys through integration with the system's keyring.
-# - Offers utility functions for loading and storing RSA keys in local storage, encrypted using AES.
-# - Centralized management of encryptors through the EncryptorManager, allowing for scalable encryption solutions across applications.
+    - EncryptorManager:
+        Manages multiple instances of TheSeedCoreEncryptor. Provides a centralized interface for creating, retrieving, and utilizing encryption instances.
 
-# Usage Scenarios:
-# - Encrypting sensitive data before storage or transmission to ensure confidentiality and data integrity.
-# - Generating RSA keys for secure data exchange or digital signatures in applications requiring high-security measures.
-# - Utilizing the manager to handle multiple encryptors for different parts of an application, simplifying the management and scalability of encryption tasks.
+Features:
+    - AES Encryption/Decryption: Supports AES encryption using GCM mode for authenticated encryption. Handles key management and secure data storage.
+    - RSA Key Management: Supports RSA key generation, storage, and encryption/decryption operations. Provides options for storing keys locally.
+    - Keyring Integration: Uses the keyring library for secure storage of AES keys.
+    - Cross-Platform Compatibility: Supports unique keyring identifiers generation based on the operating system (Windows, macOS).
+    - Logging: Comprehensive logging for all encryption and decryption operations, facilitating debugging and monitoring.
 
-# Dependencies:
-# - cryptography: Provides comprehensive cryptographic library functionalities including symmetric and asymmetric encryption.
-# - keyring: Utilized for storing and retrieving sensitive information securely in the system's key store.
-# - base64: Used for encoding binary data into ASCII characters as part of encryption and decryption processes.
-# - logging: Facilitates logging of operations within the module to aid in debugging and tracking.
-# - traceback: Utilized for detailed error handling and debugging.
-
+This module is designed to provide robust encryption solutions for securing sensitive data within TheSeedCore ecosystem.
 """
 
 from __future__ import annotations

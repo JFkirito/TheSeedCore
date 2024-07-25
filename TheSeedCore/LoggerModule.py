@@ -2,32 +2,34 @@
 """
 TheSeedCore Logging Module
 
-# This module provides advanced logging functionalities tailored for applications, supporting features like color coding of logs,
-# file saving, and toggling of debug modes. It is designed to enhance diagnostic and tracking capabilities efficiently, making it
-# crucial for both development and production environments.
-#
-# Key Components:
-# 1. TheSeedCoreLogger: Central logger class derived from logging.Logger, featuring color-coded log displays and automated log file rotation.
-# 2. setDebugMode: Function to enable or disable debug mode for a specific logger, aiding in focused troubleshooting.
-# 3. setAllDebugMode: Function to globally toggle debug mode across all logger instances, streamlining log management.
-#
-# Module Functions:
-# - Enables color differentiation of log levels in console outputs to improve readability.
-# - Supports automatic daily rotation of log files, maintaining a history of logs as per configuration.
-# - Provides mechanisms to dynamically switch debug modes, accommodating various stages of application development and deployment.
-# - Ensures a consistent log format that includes essential details such as timestamps, logger names, log levels, and messages.
-#
-# Usage Scenarios:
-# - Essential for systems requiring detailed logging, such as operational logs with varying severity levels from debug to critical errors.
-# - Beneficial during the development phase for capturing detailed debug information.
-# - Adaptable for different operational environments by adjusting logging detail levels and storage configurations.
-#
-# Dependencies:
-# - logging: Standard Python library for core logging functionalities.
-# - colorama: Enhances console output with color coding, improving log visibility and differentiation.
-# - os: Manages file and directory operations, crucial for log file management.
+This module provides a comprehensive logging system for TheSeedCore ecosystem, including color-coded console output and non-colored file logging.
 
+Classes:
+    - TheSeedCoreLogger:
+        A custom logger that supports color-coded console logging and file logging with timed rotation. It allows setting log levels and debug modes dynamically.
+
+    - _ColorFormatter:
+        A nested class within TheSeedCoreLogger that handles color formatting for console logs based on log level.
+
+    - _FileFormatter:
+        A nested class within TheSeedCoreLogger for formatting log messages written to files, without color codes.
+
+Functions:
+    - setDebugMode(name: str, debug: bool):
+        Enables or disables debug mode for a specific logger by name.
+
+    - setAllDebugMode(debug: bool):
+        Sets the debug mode for all registered loggers.
+
+Features:
+    - Color-Coded Console Logging: Provides visual differentiation of log levels using colors for console output.
+    - Timed Rotating File Logging: Log messages are written to files with daily rotation and configurable backup counts.
+    - Dynamic Debug Mode: Allows toggling debug mode for individual loggers or all loggers at runtime.
+    - Centralized Logger Management: All loggers are stored in a centralized dictionary for easy management.
+
+This module is designed to offer robust logging capabilities with ease of use and customization, aiding in monitoring and debugging TheSeedCore applications.
 """
+
 
 from __future__ import annotations
 

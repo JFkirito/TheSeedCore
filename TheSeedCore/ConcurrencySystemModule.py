@@ -1,37 +1,45 @@
 # -*- coding: utf-8 -*-
 """
-TheSeedCore Concurrency System Module.
+TheSeedCore Concurrency System Module
 
-# This module handles task management across multiple processing units using a mix of multiprocessing and multithreading strategies.
-# It efficiently schedules and executes tasks that can be either asynchronous or synchronous, utilizing both CPU and GPU resources.
-# The module can adaptively allocate tasks between threads and processes based on the current load and system capabilities.
+This module provides a comprehensive concurrency system for managing and executing tasks using multi-threading and multi-processing techniques.
+It supports both synchronous and asynchronous task execution and offers advanced features like GPU acceleration, task retry mechanisms, and dynamic resource management.
 
-# Key Components:
-# 1. _BaseTaskObject: Base class for all task objects, providing common attributes and methods for task execution.
-# 2. _AsyncTaskObject: Derived from _BaseTaskObject, designed for managing and executing asynchronous tasks.
-# 3. _SyncTaskObject: Inherits from _BaseTaskObject, tailored for synchronous task execution.
-# 4. _BaseThreadObject: Base class for thread management, encapsulating the threading logic and task queue handling.
-# 5. _AsyncThreadObject: Extends _BaseThreadObject for handling asynchronous tasks within threads.
-# 6. _SyncThreadObject: Extends _BaseThreadObject, manages the execution of synchronous tasks in a dedicated thread.
-# 7. _ProcessObject: Manages process-level operations, task distribution, and inter-process communication.
+Classes:
+    _BaseTaskObject:
+        A base class for task objects, encapsulating common properties and methods for tasks.
+        Attributes include the task function, callback function, locking mechanism, GPU settings, retry mechanisms, and task parameters.
 
-# Module Functions:
-# - Provides robust task scheduling and execution mechanisms for both CPU and GPU tasks.
-# - Supports dynamic resource allocation based on task load and system performance metrics.
-# - Facilitates detailed logging and monitoring of all task and thread activities to ensure smooth operations.
-# - Includes mechanisms for task prioritization, retries, and failure handling to enhance reliability and efficiency.
+    _AsyncTaskObject(_BaseTaskObject):
+        Manages the execution of asynchronous tasks with support for GPU acceleration and task retry logic.
 
-# Usage Scenarios:
-# - Suitable for applications requiring high throughput task processing across multiple CPUs and GPUs.
-# - Can be used in server environments where task distribution and efficient resource utilization are critical.
-# - Ideal for scenarios requiring a mix of synchronous and asynchronous task processing.
+    _SyncTaskObject(_BaseTaskObject):
+        Handles synchronous tasks execution with similar features as _AsyncTaskObject, including GPU support and retries.
 
-# Dependencies:
-# - multiprocessing: For managing processes and shared resources.
-# - threading: Utilized for creating and managing threads.
-# - asyncio: Required for managing asynchronous operations.
-# - torch: Optional, used for GPU-related tasks and operations if available.
-# - psutil: Utilized for monitoring system performance and resources.
+    _BaseThreadObject:
+        A base class for thread management, providing common functionality for thread creation, task management, and thread lifecycle control.
+
+    _AsyncThreadObject(_BaseThreadObject):
+        Specialized for handling asynchronous tasks, managing an event loop for task processing.
+
+    _SyncThreadObject(_BaseThreadObject):
+        Manages the execution of synchronous tasks in a thread context.
+
+    _ProcessObject:
+        Encapsulates process-level operations, including process creation, task management, and resource monitoring.
+
+    TheSeedCoreConcurrencySystem:
+        The core class that coordinates the entire concurrency system. Implements dynamic resource management, task queue management, and system configuration.
+        Supports expansion and shrinkage policies for managing processes and threads based on system load and task demand.
+
+Features:
+    - Task Management: Handles task submission, execution, and retries for both sync and async tasks.
+    - GPU Acceleration: Supports task execution with GPU acceleration, including handling of GPU resources.
+    - Concurrency Control: Manages tasks using threads and processes, with configurable concurrency settings.
+    - Dynamic Resource Management: Includes policies for dynamically expanding or shrinking resources (processes and threads) based on load.
+    - Error Handling and Logging: Provides comprehensive error handling and logging mechanisms.
+
+This module is designed to provide robust and scalable concurrency management, suitable for complex systems requiring efficient resource utilization and high throughput.
 """
 
 from __future__ import annotations
@@ -44,33 +52,20 @@ import os
 import queue
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import count
 from typing import TYPE_CHECKING, Union, Literal, List
 
 import psutil
 
+from . import _PyTorchSupport
+
 if TYPE_CHECKING:
     from .ConfigModule import ConcurrencySystemConfig
     from .LoggerModule import TheSeedCoreLogger
 
-_AvailableCUDADevicesID = []
-try:
-    # noinspection PyUnresolvedReferences
-    import torch
-
-    if torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        for cuda_device_id in range(num_gpus):
-            _AvailableCUDADevicesID.append(cuda_device_id)
-        _PyTorchSupport = True
-        print(f"\033[92mTheSeedCore Concurrency System - Process({os.getpid()}) : PyTorch is available and CUDA is available. Allow GPU boost\033[0m")
-    else:
-        print(f"\033[33mTheSeedCore Concurrency System - Process({os.getpid()}) : PyTorch is available but CUDA is not available. GPU boost will be unavailable\033[0m")
-        _PyTorchSupport = False
-except ImportError as PyTorchImportError:
-    print(f"\033[31mTheSeedCore Concurrency System - Process({os.getpid()}) : {str(PyTorchImportError)}. GPU boost will be unavailable\033[0m")
-    _PyTorchSupport = False
+if _PyTorchSupport:
+    from . import torch, _AvailableCUDADevicesID
 
 
 class _BaseTaskObject:
@@ -694,7 +689,7 @@ class _ProcessObject:
         使用psutil库来获取CPU和内存使用率，并计算加权负载。
         """
         try:
-            cpu_usage = self._PsutilObject.cpu_percent(0.1) / psutil.cpu_count(logical=False)
+            cpu_usage = self._PsutilObject.cpu_percent(0.0001) / psutil.cpu_count(logical=False)
         except psutil.NoSuchProcess:
             cpu_usage = 0
         memory_usage = self._PsutilObject.memory_percent()
@@ -725,10 +720,9 @@ class _ProcessObject:
         try:
             while not self._CloseEvent.is_set():
                 try:
-                    item: tuple[int, _AsyncTaskObject | _SyncTaskObject] = self._TaskQueue.get(block=False)
+                    item: tuple[int, _AsyncTaskObject | _SyncTaskObject] = self._TaskQueue.get(timeout=1)
                     priority, task_object = item
                 except queue.Empty:
-                    time.sleep(0.001)
                     continue
                 task_type = "Async" if asyncio.iscoroutinefunction(task_object.execute) else "Sync"
                 if task_type == "Async":
@@ -759,7 +753,11 @@ class _ProcessObject:
         self._Logger.debug(f"{self._ProcessType}Process {self._ProcessID} - ({self._ProcessPID}) sync thread has been closed.")
         remaining_tasks = self._TaskQueue.qsize()
         while not self._TaskQueue.empty():
-            remaining_task = self._TaskQueue.get()
+            try:
+                remaining_task = self._TaskQueue.get()
+            except Exception as e:
+                self._Logger.error(f"{self._ProcessType}Process {self._ProcessID} - ({self._ProcessPID}) error occurred while cleaning up remaining tasks: {str(e)}")
+                continue
             self._Logger.debug(f"{self._ProcessType}Process {self._ProcessID} - ({self._ProcessPID}) discarded remaining task: {remaining_task}")
             del remaining_task
         self._Logger.debug(f"{self._ProcessType}Process {self._ProcessID} - ({self._ProcessPID}) {remaining_tasks} tasks discarded.")
@@ -1097,9 +1095,8 @@ class TheSeedCoreConcurrencySystem:
         if not self._INITIALIZED:
             self._Logger = self._setConcurrencySystemLogger(Config.DebugMode)
             self._Config = TheSeedCoreConcurrencySystem._SetupConfig(self._Logger, Config)
-            self._SharedManager = multiprocessing.Manager()
-            self.CallbackQueue = self._SharedManager.Queue()
-            self._TaskLock = self._SharedManager.Lock()
+            self.CallbackQueue = multiprocessing.Queue()
+            self._TaskLock = multiprocessing.Lock()
             self._GlobalTaskQueue = queue.Queue()
             self._LoadBalancerThread = threading.Thread(target=self._loadBalancer, daemon=True)
             self._LoadBalancerThreadEvent = threading.Event()
@@ -1330,10 +1327,14 @@ class TheSeedCoreConcurrencySystem:
         3. 启动一个负载均衡器线程，该线程负责监视和调整任务分配，确保系统运行效率。
         """
         with ThreadPoolExecutor(max_workers=self._Config.CoreProcessCount + self._Config.CoreThreadCount) as executor:
+            futures = []
             for process_id in range(self._Config.CoreProcessCount):
-                executor.submit(self._startProcess, process_id, [process_id])
+                futures.append(executor.submit(self._startProcess, process_id, [process_id]))
             for thread_id in range(self._Config.CoreThreadCount // 2):
-                executor.submit(self._startThread, thread_id)
+                futures.append(executor.submit(self._startThread, thread_id))
+            for future in as_completed(futures):
+                future.result()
+            time.sleep(0.5)
             self._LoadBalancerThread.start()
 
     def _startProcess(self, process_id: int, cpu_affinity: List[int]):
@@ -1447,17 +1448,15 @@ class TheSeedCoreConcurrencySystem:
         1. 持续监听负载均衡线程事件，直至设置为关闭。
         2. 执行资源扩展策略。
         3. 执行资源收缩策略。
-        4. 清理垃圾，释放未被引用的内存。
-        5. 尝试从全局任务队列中获取任务，如果超时则继续。
-        6. 根据任务类型分配任务到相应的处理队列。
+        4. 尝试从全局任务队列中获取任务，如果超时则继续。
+        5. 根据任务类型分配任务到相应的处理队列。
         """
         while not self._LoadBalancerThreadEvent.is_set():
             self._executionExpandPolicy()
             self._executionShrinkagePolicy()
             try:
-                item: tuple[Literal["Process", "Thread"], int, _AsyncTaskObject | _SyncTaskObject] = self._GlobalTaskQueue.get(block=False)
+                item: tuple[Literal["Process", "Thread"], int, _AsyncTaskObject | _SyncTaskObject] = self._GlobalTaskQueue.get(timeout=1)
             except queue.Empty:
-                time.sleep(0.001)
                 continue
             submit_type, priority, task_object = item
             if submit_type == "Process":

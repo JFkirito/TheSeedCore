@@ -5,8 +5,10 @@ from __future__ import annotations
 
 __all__ = [
     "BASIC_SYSTEM_PATH",
+    "EXTERNAL_LIBRARY",
     "LoggerConfig",
     "SQLiteDatabaseConfig",
+    "MySQLDatabaseConfig",
     "RedisDatabaseConfig",
     "EncryptorConfig",
     "ConcurrencySystemConfig",
@@ -17,13 +19,14 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union, Literal, Any
+from typing import TYPE_CHECKING, Union, Literal
 
 if TYPE_CHECKING:
     from .LoggerModule import TheSeedCoreLogger
     from .EncryptionModule import TheSeedCoreEncryptor
 
 BASIC_SYSTEM_PATH = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXTERNAL_LIBRARY = os.path.join(BASIC_SYSTEM_PATH, "ExternalLibrary")
 
 
 @dataclass
@@ -71,6 +74,39 @@ class SQLiteDatabaseConfig:
             raise ValueError("The sqlite database path must be a string.")
         if not isinstance(self.StayConnected, bool):
             raise ValueError("The sqlite database stay connected flag must be a boolean.")
+
+
+@dataclass
+class MySQLDatabaseConfig:
+    """
+    MySQL数据库配置。
+
+    属性:
+        - Host : MySQL主机地址。
+        - Port : MySQL端口。
+        - User : MySQL用户名。
+        - Password : MySQL密码。
+        - Database : 数据库名称。
+        - Logger : 日志记录器。
+    """
+    Host: str
+    Port: int
+    User: str
+    Password: str
+    Database: str
+    Logger: Union[TheSeedCoreLogger, logging.Logger]
+
+    def __post_init__(self):
+        if not isinstance(self.Host, str):
+            raise ValueError("The mysql database host must be a string.")
+        if not isinstance(self.Port, int):
+            raise ValueError("The mysql database port must be an integer.")
+        if not isinstance(self.User, str):
+            raise ValueError("The mysql database user must be a string.")
+        if not isinstance(self.Password, str):
+            raise ValueError("The mysql database password must be a string.")
+        if not isinstance(self.Database, str):
+            raise ValueError("The mysql database name must be a string.")
 
 
 @dataclass

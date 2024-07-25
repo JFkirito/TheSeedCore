@@ -2,47 +2,54 @@
 """
 TheSeedCore Database Module
 
-# This module manages operations for SQLite and Redis databases, encompassing essential functionalities for database management.
-# It supports creating, connecting to, disconnecting from, and operating databases. The module is also equipped with encryption
-# and logging functionalities to secure data and track operations. Key components include foundational classes for both SQLite
-# and Redis databases, as well as a comprehensive database manager for managing multiple database instances and configurations.
-#
-# Key Components:
-# 1. BasicSQLiteDatabase: Handles basic SQLite database operations like connection, table creation, and data manipulation.
-# 2. ExpandSQLiteDatabase: Extends BasicSQLiteDatabase to support additional functionalities such as upsert operations.
-# 3. BasicRedisDatabase: Manages Redis database operations, dealing with key-value storage and other Redis-specific data structures.
-# 4. SQLiteDatabaseManager: Manages multiple SQLite databases, enabling dynamic creation and database operations.
-# 5. RedisDatabaseManager: Oversees multiple Redis instances, facilitating dynamic database creation and management.
-#
-# Module Functions:
-# - Facilitates basic and advanced database management.
-# - Ensures secure data storage and transmission through encryption.
-# - Integrates comprehensive logging to document database operations.
-# - Employs type checking to safeguard data operations.
-# - Provides advanced data manipulation techniques like upsert and complex transaction handling.
-#
-# Usage Scenarios:
-# - Embedding SQLite databases in Python applications for local data management.
-# - Utilizing Redis for effective data caching, session management, and real-time data manipulation.
-# - Securing database operations through encryption to protect sensitive information.
-# - Maintaining detailed logs for database operations to ensure traceability and accountability.
-# - Handling complex data structures and transactions in high-load environments.
-#
-# Dependencies:
-# - sqlite3: A Python library for SQLite database operations.
-# - redis: A library for managing Redis databases.
-# - EncryptionModule and LoggerModule: Provide encryption and logging functionalities, respectively.
-# - traceback: Utilized for error handling and debugging.
-"""
+This module provides a comprehensive system for managing SQLite, MySQL, and Redis databases, offering both basic and advanced functionalities.
+It includes classes and methods for database creation, connection management, data manipulation, and more.
 
+Classes:
+    - BasicSQLiteDatabase:
+        A foundational class for managing SQLite databases. It provides methods for connecting to a database, creating tables,
+        and performing basic data operations such as inserting, updating, and deleting data.
+
+    - BasicMySQLDatabase:
+        A foundational class for managing MySQL databases. It offers methods for connecting to a MySQL database, executing queries, and handling transactions.
+
+    - BasicRedisDatabase:
+        A basic class for managing Redis databases, including functionalities for setting and retrieving keys, managing hashes, lists, sets, sorted sets, and more.
+
+    - TheSeedCoreSQLiteDatabase:
+        A singleton class derived from BasicSQLiteDatabase, designed to manage a specific SQLite database instance with custom configurations.
+
+    - ExpandSQLiteDatabase:
+        An extended SQLite database class for managing multiple tables and performing advanced data operations like upsert, update, and delete.
+
+    - SQLiteDatabaseManager:
+        Manages multiple SQLite database instances, providing a centralized interface for database operations including creation, data manipulation, and connection management.
+
+    - MySQLDatabaseManager:
+        Manages multiple MySQL database instances, offering functionalities to create, access, and manage MySQL databases, including query execution and table management.
+
+    - RedisDatabaseManager:
+        Manages multiple Redis database instances, offering functionalities to create, access, and manage Redis databases, including utilities for handling keys, transactions, and more.
+
+Features:
+    - Database Connectivity: Establishes and manages connections to SQLite, MySQL, and Redis databases.
+    - Data Management: Supports data operations such as insert, update, delete, and search across SQLite, MySQL, and Redis databases.
+    - Encryption: Optional encryption for data stored in databases, enhancing security.
+    - Singleton Pattern: Ensures single instances for certain database classes, providing consistent state management.
+    - Logging: Comprehensive logging for all database operations, facilitating debugging and monitoring.
+
+This module is designed to provide a scalable and flexible database management solution, suitable for applications requiring robust data storage and retrieval capabilities.
+"""
 from __future__ import annotations
 
 __all__ = [
     "BasicSQLiteDatabase",
     "BasicRedisDatabase",
+    "BasicMySQLDatabase",
     "TheSeedCoreSQLiteDatabase",
     "ExpandSQLiteDatabase",
     "SQLiteDatabaseManager",
+    "MySQLDatabaseManager",
     "RedisDatabaseManager"
 ]
 
@@ -52,10 +59,12 @@ import sqlite3
 import traceback
 from typing import TYPE_CHECKING, Union
 
+import mysql.connector
 import redis
+from mysql.connector import errorcode
 
 if TYPE_CHECKING:
-    from .ConfigModule import SQLiteDatabaseConfig, RedisDatabaseConfig
+    from .ConfigModule import SQLiteDatabaseConfig, RedisDatabaseConfig, MySQLDatabaseConfig
     from .LoggerModule import TheSeedCoreLogger
 
 
@@ -164,7 +173,6 @@ class BasicSQLiteDatabase:
                         cursor.execute(table_sql)
                         created_tables.append(table_name)
                 self._ConnectedDatabase.commit()
-                self._Logger.debug(f"Database {self._DatabaseID} created tables : {', '.join(created_tables)}")
                 return True
             error_msg = f"Database {self._DatabaseID} create database error : tables_dict is empty."
             self._Logger.error(error_msg)
@@ -632,6 +640,95 @@ class BasicSQLiteDatabase:
             error_msg = f"Database {self._DatabaseID} close database error : {e}\n\n{traceback.format_exc()}"
             self._Logger.error(error_msg)
             return False
+
+
+class BasicMySQLDatabase:
+    def __init__(self, Config:MySQLDatabaseConfig):
+        self._Config = Config
+        self._Connection = None
+        self._Cursor = None
+        self._Logger = Config.Logger
+        self._StayConnected = False
+
+    def _connect(self):
+        try:
+            if not self._Connection or not self._StayConnected:
+                self._Connection = mysql.connector.connect(
+                    host=self._Config.Host,
+                    port=self._Config.Port,
+                    user=self._Config.User,
+                    password=self._Config.Password,
+                    database=self._Config.Database,
+                )
+                self._Cursor = self._Connection.cursor()
+                self._Logger.debug(f"Database {self._Config.Database} connection completed")
+        except mysql.connector.Error as e:
+            if e.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                self._Logger.error("Something is wrong with your user name or password")
+            elif e.errno == errorcode.ER_BAD_DB_ERROR:
+                self._Logger.error("Database does not exist")
+            else:
+                self._Logger.error(f"Database connection error : {e}\n\n{traceback.format_exc()}")
+
+    def _disconnect(self):
+        if self._Connection and not self._StayConnected:
+            self._Connection.close()
+            self._Connection = None
+            self._Cursor = None
+            self._Logger.debug(f"Disconnected from database {self._Config.Database}")
+
+    def executeQuery(self, query: str, params=None):
+        try:
+            self._connect()
+            self._Cursor.execute(query, params)
+            self._Connection.commit()
+            self._Logger.debug(f"Database {self._Config.Database} query executed")
+        except mysql.connector.Error as e:
+            self._Connection.rollback()
+            self._Logger.error(f"Database {self._Config.Database} executing query error : {e}\n\n{traceback.format_exc()}")
+        finally:
+            self._disconnect()
+
+    def fetchQuery(self, query: str, params=None):
+        try:
+            self._connect()
+            self._Cursor.execute(query, params)
+            result = self._Cursor.fetchall()
+            self._Logger.debug(f"Database {self._Config.Database} query fetched : {query}")
+            return result
+        except mysql.connector.Error as e:
+            self._Connection.rollback()
+            self._Logger.error(f"Database {self._Config.Database} fetching query error : {e}\n\n{traceback.format_exc()}")
+            return []
+        finally:
+            self._disconnect()
+
+    def createTable(self, table_name: str, table_structure: str):
+        try:
+            self.executeQuery(f"CREATE TABLE IF NOT EXISTS {table_name} ({table_structure})")
+            self._Logger.debug(f"Database {self._Config.Database} table created.")
+        except mysql.connector.Error as e:
+            self._Connection.rollback()
+            self._Logger.error(f"Database {self._Config.Database} creating table error : {e}\n\n{traceback.format_exc()}")
+
+    def insertData(self, query: str, data: tuple):
+        try:
+            self.executeQuery(query, data)
+            self._Logger.debug(f"Database {self._Config.Database} data inserted.")
+        except mysql.connector.Error as e:
+            self._Connection.rollback()
+            self._Logger.error(f"Database {self._Config.Database} inserting data error : {e}\n\n{traceback.format_exc()}")
+
+    def deleteTable(self, table_name: str):
+        try:
+            self.executeQuery(f"DROP TABLE IF EXISTS {table_name}")
+            self._Logger.debug(f"Database {self._Config.Database} table {table_name} deleted.")
+        except mysql.connector.Error as e:
+            self._Connection.rollback()
+            self._Logger.error(f"Database {self._Config.Database} deleting table error : {e}\n\n{traceback.format_exc()}")
+
+    def closeDatabase(self):
+        self._disconnect()
 
 
 class BasicRedisDatabase:
@@ -1768,6 +1865,7 @@ class SQLiteDatabaseManager:
         - IsClosed : 是否关闭。
     """
     _INSTANCE: SQLiteDatabaseManager = None
+    _INITIALIZED: bool = False
 
     def __new__(cls, Logger: Union[TheSeedCoreLogger, logging.Logger]):
         if Logger is None:
@@ -1777,9 +1875,11 @@ class SQLiteDatabaseManager:
         return cls._INSTANCE
 
     def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger]):
-        self._Logger = Logger
-        self._DatabaseDict: dict = {}
-        self.IsClosed = False
+        if not self._INITIALIZED:
+            self._Logger = Logger
+            self._SQLiteDatabase: dict = {}
+            self.IsClosed = False
+            SQLiteDatabaseManager._INITIALIZED = True
 
     def createSQLiteDatabase(self, tables_structured: dict, config: SQLiteDatabaseConfig) -> bool:
         """
@@ -1800,7 +1900,7 @@ class SQLiteDatabaseManager:
                 table_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({pk_name} {pk_type}, {columns_sql})"
                 tables_dict[table_name] = table_sql
             custom_database = ExpandSQLiteDatabase(tables_dict, config)
-            self._DatabaseDict[config.DatabaseID] = custom_database
+            self._SQLiteDatabase[config.DatabaseID] = custom_database
             return True
         except Exception as e:
             error_msg = f"SQLiteDatabaseManager create expand database error : {e}\n\n{traceback.format_exc()}"
@@ -1817,7 +1917,7 @@ class SQLiteDatabaseManager:
         返回:
             :return : 返回对应的数据库实例，如果不存在返回None。
         """
-        return self._DatabaseDict.get(database_id)
+        return self._SQLiteDatabase.get(database_id)
 
     def getExistingTables(self, database_id) -> list:
         """
@@ -2069,7 +2169,7 @@ class SQLiteDatabaseManager:
         if database_instance is not None and hasattr(database_instance, "basicCloseDatabase"):
             result = database_instance.basicCloseDatabase()
             if result:
-                self._DatabaseDict.pop(database_id)
+                self._SQLiteDatabase.pop(database_id)
             return result
         else:
             error_msg = f"SQLiteDatabaseManager close database error : database '{database_id}' not found."
@@ -2078,20 +2178,89 @@ class SQLiteDatabaseManager:
 
     def closeAllDatabase(self) -> bool:
         """关闭所有管理的数据库连接。"""
-        if self._DatabaseDict:
-            for database_id in list(self._DatabaseDict.keys()):
+        if self._SQLiteDatabase:
+            for database_id in list(self._SQLiteDatabase.keys()):
                 self.closeDatabase(database_id)
         self.IsClosed = True
         self._Logger.debug("All sqlite databases closed.")
         return True
 
 
+class MySQLDatabaseManager:
+    _INSTANCE: MySQLDatabaseManager = None
+    _INITIALIZED: bool = False
+
+    def __new__(cls, Logger: Union[TheSeedCoreLogger, logging.Logger], *args, **kwargs):
+        if not cls._INSTANCE:
+            cls._INSTANCE = super(MySQLDatabaseManager, cls).__new__(cls)
+        return cls._INSTANCE
+
+    def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger]):
+        if not self._INITIALIZED:
+            self._Logger = Logger
+            self._MySQLDatabase = {}
+            MySQLDatabaseManager._INITIALIZED = True
+
+    def createMySQLDatabase(self, config:MySQLDatabaseConfig):
+        if config.Database not in self._MySQLDatabase:
+            self._MySQLDatabase[config.Database] = BasicMySQLDatabase(config)
+            self._Logger.debug(f"Database {config.Database} created.")
+
+    def getDatabase(self, database_name: str) -> BasicMySQLDatabase:
+        return self._MySQLDatabase.get(database_name)
+
+    def executeQuery(self, database_name: str, query: str, params=None):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.executeQuery(query, params)
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def fetchQuery(self, database_name: str, query: str, params=None):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.fetchQuery(query, params)
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def createTable(self, database_name: str, table_name: str, table_structure: str):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.createTable(table_name, table_structure)
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def insertData(self, database_name: str, table_name: str, data: tuple):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.insertData(table_name, data)
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def deleteTable(self, database_name: str, table_name: str):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.deleteTable(table_name)
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def closeDatabase(self, database_name: str):
+        database_instance = self.getDatabase(database_name)
+        if database_instance:
+            return database_instance.closeDatabase()
+        else:
+            self._Logger.error(f"Database {database_name} not found.")
+
+    def closeAllDatabase(self):
+        for database_name in list(self._MySQLDatabase.keys()):
+            self.closeDatabase(database_name)
+        self._Logger.debug("All MySQL databases closed.")
+
+
 class RedisDatabaseManager:
     """
     TheSeed Redis 数据库管理器
 
-    参数:
-        :param Config : 数据库配置数据类。
     属性:
         - _INSTANCE : 单例实例。
         - _Logger : 日志记录器。
@@ -2100,6 +2269,7 @@ class RedisDatabaseManager:
         - IsClosed : 是否关闭。
     """
     _INSTANCE: RedisDatabaseManager = None
+    _INITIALIZED: bool = False
 
     def __new__(cls, Logger: Union[TheSeedCoreLogger, logging.Logger]):
         if Logger is None:
@@ -2109,9 +2279,11 @@ class RedisDatabaseManager:
         return cls._INSTANCE
 
     def __init__(self, Logger: Union[TheSeedCoreLogger, logging.Logger]):
-        self._Logger = Logger
-        self._RedisDatabase = {}
-        self.IsClosed = False
+        if not self._INITIALIZED:
+            self._Logger = Logger
+            self._RedisDatabase = {}
+            self.IsClosed = False
+            RedisDatabaseManager._INITIALIZED = True
 
     def createRedisDatabase(self, database_id: str, config: RedisDatabaseConfig):
         try:
