@@ -2,67 +2,53 @@
 
 ## 简介
 
-TheSeedCore 是一个高度模块化和可扩展的框架，旨在为开发复杂的应用程序提供一个坚实的基础。框架集成了多个核心模块，包括并发处理、配置管理、数据库操作、加密功能、外部服务集成、日志记录、网络服务以及初始化启动流程，使其成为构建高效、安全和可维护应用程序的理想选择。
+TheSeedCore 是一个综合性的模块化框架，旨在满足现代应用开发的多样化需求。无论是构建高性能、可扩展的应用程序，还是集成复杂的系统，TheSeedCore 都提供了强大的基础，涵盖广泛的功能。凭借其模块化、安全性和灵活性的设计，TheSeedCore 能够帮助开发者创建可靠且易于维护的解决方案
 
 ## 主要特性
 
-每个模块都被设计为低耦合和高内聚，可以独立于其他模块工作，同时提供接口与其他模块交互，以完成复杂的业务场景。
-
 ### 模块化架构
 
-- **高度可扩展**：TheSeedCore 设计为高度模块化的框架，可以轻松集成到各种软件架构中，支持独立或协同工作。
+- TheSeedCore 的模块化架构允许轻松定制和扩展。每个模块都专为处理特定任务而设计，确保了关注点的分离，便于维护和扩展
 
+### 全面的并发支持
 
-- **组件化设计**：通过独立且互联的模块实现功能，涵盖并发系统、配置管理、数据库操作、加密服务、外部服务集成、日志记录以及网络服务。
+- 框架包含强大的并发模块，支持多线程和多进程，提高系统性能和资源利用率。这使得任务管理和执行更加高效，适用于高性能应用。
 
+### PyQt/PySide 支持
 
-- **模块交互与扩展**：模块之间通过接口交互，支持业务逻辑实现；同时提供模块的扩展和定制，满足不同需求。
+- TheSeedCore 集成了对 Qt 的支持，特别是在回调执行和界面操作方面。通过 PyQt/PySide 事件循环管理回调和异步任务，确保图形界面应用的流畅性和响应性。
 
-### 强大的并发系统
+### Kafka 支持
 
-- **多进程与多线程**：支持并发处理以及并行计算，提高系统性能和资源利用率。
+- TheSeedCore 的 Kafka 服务模块提供了管理 Apache Kafka 集群的全面支持。包括集群配置、生产者和消费者管理以及主题处理，适用于分布式消息系统。
 
+### 多功能数据库集成
 
-- **负载均衡与任务优先级管理**：根据框架的资源使用率以及任务数量，实现负载均衡，优化资源分配；根据任务重要性调整执行优先级。
+- TheSeedCore 提供与多种数据库（包括 SQLite、MySQL 和 Redis）的无缝集成。通过统一的数据库操作接口，开发者可以轻松切换不同数据库，而无需修改代码。
 
-### 数据库管理
+### 高级加密功能
 
-- **支持多种数据库**：支持 SQLite 和 Redis 数据库以及对应的事务管理，提供灵活的数据存储和查询选项。
+- TheSeedCore 提供先进的数据加密和解密功能，支持AES和RSA加密，提供密钥的生成、管理和使用功能。配备密钥管理和安全数据处理，确保您的数据始终受到保护。
 
+### 外部服务管理
 
-- **数据安全与完整性**：提供数据加密和事务管理，确保数据安全性和一致性。
+- 框架包含一个外部服务模块，支持 Node.js 包的安装和管理。这使得集成外部服务和扩展应用功能变得简单。
 
-### 安全和数据保护
+### 先进的网络服务
 
-- **全面的加密解决方案与密钥管理**：提供先进的数据加密和解密功能，支持AES和RSA加密；提供密钥的生成、管理和使用功能。
+- 网络模块包括 HTTP 服务器和 WebSocket 服务器/客户端功能，支持异步操作和安全连接，并且消息处理可定制，适用于实时通信和高效的网络操作。
 
-### 配置和服务管理
+### 灵活的日志系统
 
-- **动态配置与外部服务集成**：支持运行时配置更新；简化Node.js等第三方服务的集成。
+- TheSeedCore 提供先进的日志模块，支持颜色格式化的控制台输出和文件日志记录，并支持日志轮换。可配置的日志级别和调试模式确保您能够详细了解应用程序的操作和错误。
 
+### 高度的可定制性和扩展性
 
-- **服务控制**：无缝启动和停止外部服务。
+- TheSeedCore 设计高度可定制和扩展。其模块化方法允许开发者轻松添加新功能并与其他系统集成，确保框架能够随应用需求的增长而扩展。
 
-### 网络通信能力
+### 详细的错误处理和日志记录
 
-- **HTTP与WebSocket支持**：提供高性能HTTP服务器和实时WebSocket服务。
-
-
-- **扩展性与实时互动**：轻松添加新路由和处理程序；支持构建实时通信应用。
-
-### 日志记录
-
-- **颜色编码与文件轮换**：不同日志级别以不同颜色显示，提升可读性；自动按天轮换日志文件。
-
-
-- **调试模式**：轻松开启或关闭调试模式，便于开发过程中的详细日志查看。
-
-### 易用性和维护性
-
-- **清晰的API设计**：提供直观的API，简化开发过程，减少学习曲线。
-
-
-- **详细的错误处理和反馈**：系统自动记录错误信息并提供反馈，帮助开发者快速定位和解决问题。
+- TheSeedCore 的每个模块都配备了完善的错误处理和详细的日志记录功能，确保能够及时识别和解决任何问题，便于调试和维护应用的稳定性。
 
 ## 使用场景
 
@@ -114,15 +100,15 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 ├── init.py
 
-├── ConcurrencySystemModule.py
-
-├── ConfigModule.py
+├── ConcurrentSystemModule.py
 
 ├── DatabaseModule.py
 
 ├── EncryptionModule.py
 
 ├── ExternalServicesModule.py
+
+├── KafkaServiceModule.py
 
 ├── LoggerModule.py
 
@@ -135,118 +121,255 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 - Python 3.11 或更高版本
 
-
-- Node.js
-
-
-- 相关 Python 库：aiohttp, asyncio, websockets,requests, redis, rsa, Crypto
-
 ## 使用说明
 
-### 启动
+### 模块依赖
 
-必须在程序入口使用 TheSeedCore 的 `linkStart` 方法启动，并将应用作为参数传入，TheSeedCore 会自动管理并实例应用。
+1. TheSeedCore除了并发系统模块 `ConcurrentSystemModule` 和日志模块 `LoggerModule` 外，其他模块都需要一定的依赖库支持。
 
-### 关闭
+2. `linkStart` 方法在启动时会检查各个模块的依赖，如果某个模块缺少依赖，TheSeedCore会提示应该安装哪些依赖库以支持该模块的使用。
 
-在应用退出时，进行自定义的清理后，请调用 TheSeedCore 的 `linkStop` 方法关闭 TheSeedCore， 此方法会关闭和清理由 TheSeedCore 创建的所有资源。
+3. 如果在缺少依赖的情况下仍然导入该模块的类，系统将会抛出 `ModuleNotFoundError` 异常。
+
+4. 如果不希望看到依赖检查信息，可以在调用 `linkStart` 时传递`False`，依赖检查信息将不会打印到控制台。
+
+```
+from TheSeedCore import *
+
+if __name__ == "__main__":
+    # 传递False将不会显示依赖检查信息
+    linkStart()
+```
+
+### 启动和关闭
+
+1. **_启动_**
+    1. 在程序入口处必须调用 `linkStart` 方法来启动TheSeedCore，该方法会启动主事件循环并初始化TheSeedCore执行您的应用程序。
+
+2. **_主事件循环_**
+    1. TheSeedCore会自动获取当前异步事件循环来作为回调执行的主事件循环。
+    2. 如果导入TheSeedCore之前没有创建事件循环，TheSeedCore会立即创建一个并存储在 `MainEventLoop` 中，后续您可以调用 `MainEventLoop` 来获取主事件循环。
+
+3. **_关闭_**
+    1. 退出应用时请调用 `linkStop` 方法，该方法会清理所有由TheSeedCore创建的所有资源后关闭主事件循环并退出应用程序。
+
+```
+import asyncio
+from TheSeedCore import *
+
+class MyApplication:
+    def __init__(self, some_value):
+        self.value = some_value
+        self._initApplication()
+        
+    def _initApplication(self):
+        # 在这里用主事件循环创建一个异步任务
+        MainEventLoop.create_task(self.printValue())
+        
+    async def printValue(self):
+        await asyncio.sleep(1)
+        print(self.value)
+        # 在这里调用linkStop关闭应用
+        linkStop()
+    
+if __name__ == "__main__":
+    app = MyApplication("This is TheSeeCore. Welcome home sir")
+    linkStart()
+```
+
+### Qt模式
+
+1. Qt模式依赖 `qasync` 库来管理Qt事件循环，集成 `PyQt` / `PySide` 时，请确保安装了 `qasync` 库，以确保异步任务和回调的正确执行。
+
+2. 在程序入口处实例 `QApplication` 后，TheSeedCore会自动识别 `QApplication` 实例并使用 `qasync` 库来管理Qt事件循环。
+
+3. 在Qt模式下请确保在程序入口处实例 `QApplication` 后再调用 `linkStart` 方法，否则即使安装了Qt库也无法正确执行异步任务和回调，并可能会导致UI未响应。
+
+4. TheSeedCore会自动将 `QApplication` 实例的 `aboutToQuit` 信号连接到 `linkStop` 方法，以确保在退出应用时正确关闭TheSeedCore。
+
+```
+import sys
+
+# 这里替换为PyQt或PySide
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication
+
+from TheSeedCore import linkStart
+
+
+class MyApplication:
+    def __init__(self):
+        self.widget = QWidget()
+        self.widget.setWindowTitle("TheSeedCoreQtMode")
+        self.widget.setMinimumSize(600, 400)
+        self.layout = QVBoxLayout(self.widget)
+        self.label = QLabel("TheSeedCore")
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.layout.addWidget(self.label)
+        self.widget.show()
+
+
+if __name__ == "__main__":
+    qt_app = QApplication(sys.argv)
+    window = MyApplication()
+    linkStart()
+
+```
 
 ### 模块调用
 
-TheSeedCore 的模块都是独立的，可以单独调用或与其他模块组合使用。
-
-### linkStart参数
-
-- **`application`**：应用实例，必须是一个可调用的类对象。
-
-
-- **`basic_system_path`**：基础系统路径，默认为 `None`。
-    - 为None时，TheSeedCore会在当前目录下创建TheSeedData文件夹，用于存放日志文件、数据库文件等数据文件。
-
-
-- **`concurrency_system_config`**：并发系统配置，默认为 `None`。
-    - 可以实例`ConfigModule`模块的`ConcurrencySystemConfig`数据类自定义并发系统的配置以及性能。
-    - 为None时，TheSeedCore会根据系统的硬件配置自动设置合适的配置值。
-
-
-- **`banner_mode`**：Banner的颜色显示模式，默认为`Solid`。
-    - 只接受 `Solid` 和 `Gradient`。
-
-
-- **`debug`**：是否启用调试模式，默认为 False。
-    - 开启调试模式会将日志记录输出到控制台中。
+1. **TheSeedCore 的模块都是独立的，在依赖允许的情况下可以单独调用或与其他模块组合使用。**
+2. **可以使用 `from TheSeedCore import *` 导入所有可用类**
+3. **在调用模块之前请确保已经安装了该模块所需的依赖。**
 
 ### 目录
 
-- **以下目录会在TheSeedCore启动时自动生成**：
-    - **`ExternalLibrary`**：外部库文件夹。
-    - **`TheSeedData`**：用于存放日志文件、数据库文件等数据文件。
+- **以下文件夹根据不同环境会存放在不同目录**
+    1. 开发环境：目录会生成在和TheSeedCore同级的目录下。
+    2. 生产环境：目录会生成在和应用程序同级的目录下。
 
+- **_TheSeedCoreData_**
+    1. `Database` ： 数据库文件夹。
+    2. `ExternalServices` ： 外部服务文件夹。
+    3. `Logs` ： 日志文件夹。
 
-- **开发环境**: 目录会生成在和TheSeedCore同级的目录下。
-
-
-- **生产环境**: 目录会生成在和应用程序同级的目录下。
+- **_ExternalLibrary_**
+    1. 外部库文件夹。
 
 ### 加密
 
-- **AES**：TheSeedCore 的加密器被设计为启动时使用 设备编码 + 自定义key 来生成Keyring的唯一标识符并使用该标识符存储AES秘钥。如果分发时携带了使用 `aesEncryptData` 或 `aesEncrypt` 方法加密的数据，或数据库使用了数据加密，分发的应用将无法解密数据
+- **_AES_**
+    1. TheSeedCore 的加密器被设计为启动时使用 _设备编码_ + _自定义key_ 来生成 `Keyring` 的唯一标识符并使用该标识符存储AES秘钥。
+    2. 如果分发时携带了使用 `aesEncryptData` 或 `aesEncrypt` 方法加密的数据，或数据库使用了数据加密，分发的应用将无法解密数据
 
-
-- **RSA**：`generateRSAKeys`方法会立即返回未加密的公私钥对，如果指定了存储路径和  `store_locally`参数，TheSeedCore 会使用该加密器实例的AES将私钥加密后存储在指定的路径
-
+- **_RSA_**
+    1. `generateRSAKeys`方法会立即返回未加密的公私钥对
+    2. 如果指定了存储路径和 `store_locally` 参数，TheSeedCore 会使用该加密器实例的AES将私钥加密后存储在指定的路径
 
 - **如果分发时必须携带加密数据，可以采用以下方案**。
-    - **使用 `generateRSAKeys` 方法不指定存储路径生成公私钥对，用 `generateRSAKeys` 方法返回的公钥加密数据，然后将私钥手动保存或将私钥不加密存储进数据库中，分发时携带私钥，运行时使用私钥解密数据后在客户端再次将数据加密存储，随后删除私钥**。
+    1. 使用 `generateRSAKeys` 方法不指定存储路径生成公私钥对
+    2. 使用 `generateRSAKeys` 方法返回的公钥加密数据，然后将私钥手动保存或将私钥不加密存储进数据库中，分发时携带私钥
+    3. 运行时使用私钥解密数据后在客户端再次将数据加密存储，随后删除私钥。
 
 ### 并发系统
 
-- **内部工作原理**
-    - **GPU支持检测与利用**
-        - 系统在启动时检测PyTorch及CUDA的可用性，对GPU资源进行动态配置，以支持并加速任务执行。
-    - **任务对象管理**
-        - 定义了基础任务对象`_BaseTaskObject`，包括任务执行所需的所有参数和方法，支持同步与异步任务。
-        - 任务可以配置是否使用GPU、是否需要锁定、重试策略等。
-    - **异步和同步任务的执行**
-        - 为异步任务和同步任务分别定义了执行方法，包括错误处理和重试逻辑。
-        - 在执行过程中，如果启用了GPU加速，则会将数据传输到GPU进行处理，并在处理完成后清理GPU资源。
-    - **线程与进程的管理**
-        - 使用线程和进程对象封装复杂的并发行为，包括任务的分配、执行和线程/进程的生命周期管理。
-        - 每个进程或线程可以独立管理其任务队列和执行逻辑，提高任务处理的灵活性和效率。
+- **_队列和模式_**
+  - 系统使用生产者-消费者模式，并使用非阻塞队列进行IPC(Inter-Process Communication)
+      1. 全局任务队列：由全局线程任务队列和全局进程任务队列组成。
+      2. 进程任务队列：每个进程都有自己的任务队列，进程之间的任务不会相互干扰。
+      3. 线程任务队列：每个线程都有自己的任务队列，包括进程中的线程，线程的任务队列为优先级队列。
 
+- **_延迟_**
+  - 由于队列的特性，IPC会有一定的延迟，下面是8个进程100次网络请求任务的单任务延迟和多任务延迟的测试结果。
+      1. 单任务到达时间
+          1. 最小时间：约 0.1313 秒
+          2. 平均时间：约 0.1851 秒
+          3. 最大时间：约 0.2491 秒
+      2. 多任务到达时间
+          1. 最小时间：约 0.1965 秒
+          2. 平均时间：约 6.8159 秒
+          3. 最大时间：约 13.9273 秒
+      3. 实际的延迟可能会受到以下因素的影响
+          1. 系统负载
+          2. 数据量和复杂性
+          3. 网络和硬件环境
 
-- **性能优化策略**
-    - **资源利用与负载均衡**
-        - 实现动态资源管理，根据系统负载动态调整线程和进程的数量，优化资源利用率。
-        - 通过负载均衡策略，确保各处理单元负载均匀，避免某些节点过载而其他节点空闲。
-    - **任务调度优化**
-        - 优化任务调度策略，通过优先级队列和任务类型管理，确保高优先级任务优先执行，同时根据任务类型（CPU密集型或I/O密集型）智能调度到最适合的处理单元。
-        - 引入任务拒绝策略，对于超出处理能力的任务，可以选择合理的拒绝策略以保证系统稳定性和响应性。
-    - **错误处理与重试机制**
-        - 增强错误处理能力，对于可能因外部因素导致失败的任务，提供自动重试机制。
-        - 通过配置最大重试次数和重试策略，避免系统资源被无效任务长时间占用。
-    - **GPU资源管理**
-        - 对于支持GPU的任务，优化GPU资源的分配和管理，确保GPU资源的高效利用。
-        - 在任务执行完毕后，及时清理GPU资源，避免内存泄漏。
+- **_线程_**
+  - 系统线程
+    1. 负载均衡线程：轮询检查进程和线程的负载情况并根据配置的负载均衡策略来扩展和收缩线程和进程。
+    2. 进程任务分配线程：轮询从全局进程任务队列中获取任务并根据所有进程的负载情况分配任务。
+    3. 线程任务分配线程：轮询从全局线程任务队列中获取任务并根据所有线程的负载情况分配任务。
+  - 核心线程/扩展线程
+    1. 核心线程和扩展线程主要运行在主进程中，适合处理一些IO密集型任务。
+    2. 核心线程会在系统启动时创建并一直运行，扩展线程会根据负载均衡策略自动创建和销毁。
+    3. 线程分为同步线程和异步线程，系统启动和负载均衡时时会根据核心线程数和最大线程数对等创建和收缩同步线程和异步线程。
 
-- **配置和性能调整**
-    - **并发系统配置**：通过实例化ConfigModule模块的ConcurrencySystemConfig数据类，可以自定义并发系统的配置，涵盖进程数、线程数、任务阈值、负载平衡策略等，使得并发系统能够根据不同的硬件环境和应用需求进行优化。
+- **_进程_**
+  - 进程线程
+    1. 每个进程都有一组同步线程和异步线程，进程会根据任务类型自动分配任务给同步线程或异步线程。
+    2. 进程线程数是固定的，不会根据负载均衡策略自动创建和销毁。
+  - 核心进程/扩展进程
+    1. 系统会根据配置创建一定数量的进程，如果没有指定则根据物理CPU核心数动态创建并设置最大进程数。
+    2. 核心进程会在系统启动时创建并一直运行，扩展进程会根据负载均衡策略自动创建和销毁。
 
+- **_任务序列化处理器_**
+  - 由于整个系统使用非阻塞队列进行IPC，在传递任务时可能会遇到无法序列化的情况，为此系统提供了任务序列化处理器。
+  - 可以继承 `TaskSerializationProcessor` 类并实现 `restoreUnserializableAttr` 方法来处理无法序列化的属性。
 
-- **线程管理策略**
-    - **线程使用**： 并发系统采用了多线程策略，核心线程池（Core）和扩展线程池（Expand）均运行在主进程上，专门用于处理I/O密集型任务和轻量级并发任务。核心线程池提供持续服务，而扩展线程池根据实时负载动态调整，以适应突发的任务高峰。
-    - **任务类型管理**：系统将异步和同步任务分开管理，通过独立的队列分配给专门的线程，优化执行效率和响应时间。确保任务按需分配到最适合的处理资源上。
+- **_配置_**
+  - `ConcurrentSystemConfig`
+    - **`CoreProcessCount`**：核心进程数，默认为None，系统会根据物理CPU核心数动态设置。
+    - **`CoreThreadCount`**：核心线程数，默认为None，系统会根据核心进程数动态设置。
+    - **`MaximumProcessCount`**：最大进程数，默认为None，系统会根据CPU核心数动态设置。
+    - **`MaximumThreadCount`**：最大线程数，默认为None，系统会根据最大进程数动态设置。
+    - **`IdleCleanupThreshold`**：进程内存空闲清理阈值，默认为None，系统会根据负载均衡策略自动清理进程内存。
+    - **`ProcessPriority`**：进程优先级，默认为NORMAL。
+    - **`TaskThreshold`**：任务阈值，默认为None，系统会根据物理CPU核心数和物理内存自动计算阈值。
+    - **`GlobalTaskThreshold`**：全局任务队列阈值，默认为None，系统会根据物理CPU核心数和物理内存总量自动计算阈值。
+    - **`TaskRejectionPolicy`**：任务拒绝策略，默认为 `Abandonment` 。
+    - **`RejectionPolicyTimeout`**：超时拒绝策略的超时时间，默认为3秒。
+    - **`ExpandPolicy`**：扩展策略，默认为 `AutoExpand` 。
+    - **`ShrinkagePolicy`**：收缩策略，默认为 `AutoShrink` 。
+    - **`ShrinkagePolicyTimeout`**：可以理解为KeepAlive的时间，默认15秒。如果收缩策略为 `AutoShrink` 扩展线程/进程在没有工作和任务时超过这个时间将会被销毁。
+    ```
+    from TheSeedCore import *
 
+    config = ConcurrentSystemConfig(
+        CoreProcessCount=2,
+        CoreThreadCount=6,
+        MaximumProcessCount=8,
+        MaximumThreadCount=12,
+        IdleCleanupThreshold=10,
+        ProcessPriority="NORMAL",
+        TaskThreshold=100,
+        GlobalTaskThreshold=1000,
+        TaskRejectionPolicy="Abandonment",
+        RejectionPolicyTimeout=5,
+        ExpandPolicy="AutoExpand",
+        ShrinkagePolicy="AutoShrink",
+        ShrinkagePolicyTimeout=30
+    )
 
-- **进程与线程的关系**
-    - **进程结构**：并发系统中的进程分为核心（Core）进程和扩展（Expand）进程。每个核心进程和扩展进程内部都维护着自己的一组线程（同步和异步线程），这些线程专门处理该进程分配的任务。核心进程负责处理常规且关键的任务，而扩展进程在系统负载高时被动态创建，以增强处理能力。
+    if __name__ == "__main__":
+        concurrent_system = TheSeedCoreConcurrentSystem(config)
+        concurrent_system.startSystem()
+        linkStart()
+    ```
 
-    - **进程中的线程**：核心线程和扩展线程虽然在主进程中运行，但每个独立的核心进程和扩展进程都有自己的线程组，这些线程负责执行进程级的任务，利用多线程的优势来提高任务处理速度和效率。
-
-
-- **资源动态调整与扩展**
-    - **自适应负载管理**：系统能够监控实时的负载情况，并根据需要自动调整进程和线程的数量。帮助系统在保持高性能的同时，优化资源使用和成本。
-    - **进程和线程的动态扩展**：在需要处理更多任务时，系统可以动态启动更多的扩展进程和线程，而在负载减少时相应地减少这些资源，确保系统资源的有效利用。
+- **_提交任务_**
+  - `submitProcessTask` 和 `submitThreadTask` 方法用于提交进程任务和线程任务，参数是一致的。
+    - **task**：任务函数。
+    - **priority**：任务优先级，默认为0。
+    - **callback**：任务完成后的回调函数，默认为None。
+    - **serialization_processor**：任务序列化处理器，默认为None。
+    - **is_lock**：是否锁定任务，默认为False。
+    - **lock_holding_time**：锁定任务的时间，默认为3。
+    - **is_gpu_boost**：是否使用GPU加速，默认为False。
+    - **gpu_id**：GPU ID，默认为0。
+    - **is_retry**：是否重试，默认为False。
+    - **max_retries**：最大重试次数，默认为3。
+    - ***args**：任务函数的参数。
+    - ****kwargs**：任务函数的关键字参数。
+    ```
+    import time
+    from TheSeedCore import *
+    
+    def testIOBound():
+        start_time = time.time()
+        time.sleep(1)  # 模拟IO操作
+        result = time.time() - start_time
+        return f"{result:.4f}\n"
+    
+    def testCallback(result):
+        print(result)
+    
+    if __name__ == "__main__":
+        concurrent_system = TheSeedCoreConcurrentSystem()
+        concurrent_system.startSystem()
+        for i in range(10):
+            concurrent_system.submitProcessTask(testIOBound, callback=testCallback)
+        linkStart()
+    ```
 
 ## 快速开始
 
@@ -255,29 +378,26 @@ pip install requirements.txt
 ```
 
 ```
+import asyncio
 from TheSeedCore import *
 
-class Test(TheSeed):
-    def __init__(self):
-        ...
-
-
+async def testFunction():
+    print("This is TheSeedCore. Welcome home sir")
+    for i in range(10):
+        await asyncio.sleep(1)
+        print("System shutdown countdown:", 10 - i)
+    print("System shutdown")
+    linkStop()
+    
 if __name__ == "__main__":
-    linkStart(Test, debug_mode=True)
-
+    MainEventLoop.create_task(testFunction())
+    linkStart()
 ```
 
 ## 接口文档
-
-- 大部分快速接口都封装在了TheSeed类中，可以通过直接调用TheSeed类或继承TheSeed类调用。
-
-
 - 接口文档详见[TheSeedCoreInterface](TheSeedCoreInterface.md)。
 
 ## 许可证
 
-此项目在 Apache License 2.0 下发布。该许可证允许他人对项目进行商业或非商业的使用、修改和再分配，同时要求在修改后的文件中必须声明改动，并提供对原作者的必要归属。此外，Apache License 2.0 还提供了对专利的明确保护。
+此项目在 MIT许可下发布，您可以自由使用，复制，修改，分发本项目。
 请查阅 [LICENSE](LICENSE) 文件获取更多信息。
-
-
-

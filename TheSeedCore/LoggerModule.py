@@ -1,55 +1,75 @@
 # -*- coding: utf-8 -*-
 """
-TheSeedCore Logging Module
+TheSeedCore Logger Module
 
-This module provides a comprehensive logging system for TheSeedCore ecosystem, including color-coded console output and non-colored file logging.
+Module Description:
+This module provides a comprehensive logging system for TheSeedCore, featuring color-formatted console output and non-colored file logging.
+It includes functionality for setting up and managing loggers with configurable parameters such as log levels, file paths, and debug modes.
+The module supports rotation of log files based on time intervals.
 
-Classes:
-    - TheSeedCoreLogger:
-        A custom logger that supports color-coded console logging and file logging with timed rotation. It allows setting log levels and debug modes dynamically.
+Main Components:
+1. Logger Configuration: Defines a data class for configuring loggers, including name, path, backup count, log level, and debug mode.
+2. TheSeedCoreLogger Class: Implements the core logging functionalities, providing color-formatted console output and file logging.
+3. Utility Functions: Provides functions to set the debug mode for individual loggers or all loggers.
 
-    - _ColorFormatter:
-        A nested class within TheSeedCoreLogger that handles color formatting for console logs based on log level.
+Module Functionality Overview:
+- Configurable logging with support for colored console output and non-colored file logging.
+- Supports log file rotation based on time intervals.
+- Allows setting and updating log levels and debug modes dynamically.
+- Manages multiple loggers with unique configurations.
+- Ensures proper directory creation for log file storage.
 
-    - _FileFormatter:
-        A nested class within TheSeedCoreLogger for formatting log messages written to files, without color codes.
+Key Classes and Methods:
+- LoggerConfig: Data class for logger configuration parameters.
+- TheSeedCoreLogger: Core logger class with color-formatted console output and file logging.
+  - _ColorFormatter: Formatter for colored console output.
+  - _FileFormatter: Formatter for non-colored file logging.
+  - DebugMode: Property to get or set the debug mode of the logger.
+- setDebugMode(): Sets the debug mode for a specific logger.
+- setAllDebugMode(): Sets the debug mode for all loggers.
 
-Functions:
-    - setDebugMode(name: str, debug: bool):
-        Enables or disables debug mode for a specific logger by name.
-
-    - setAllDebugMode(debug: bool):
-        Sets the debug mode for all registered loggers.
-
-Features:
-    - Color-Coded Console Logging: Provides visual differentiation of log levels using colors for console output.
-    - Timed Rotating File Logging: Log messages are written to files with daily rotation and configurable backup counts.
-    - Dynamic Debug Mode: Allows toggling debug mode for individual loggers or all loggers at runtime.
-    - Centralized Logger Management: All loggers are stored in a centralized dictionary for easy management.
-
-This module is designed to offer robust logging capabilities with ease of use and customization, aiding in monitoring and debugging TheSeedCore applications.
+Notes:
+- Ensure the required directories for log file storage are created before initializing loggers.
+- Configure logger parameters appropriately in the LoggerConfig data class.
+- Utilize the utility functions to manage debug modes for loggers as needed.
+- Refer to the logging output for detailed information on log operations and errors.
 """
-
 
 from __future__ import annotations
 
-__all__ = [
-    "TheSeedCoreLogger",
-    "setDebugMode",
-    "setAllDebugMode"
-]
-
 import logging
 import os
+from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from typing import TYPE_CHECKING
 
 from colorama import Fore, Style
 
 if TYPE_CHECKING:
-    from .ConfigModule import LoggerConfig
+    pass
 
 _LOGGERS = {}
+
+
+@dataclass
+class LoggerConfig:
+    Name: str
+    Path: str
+    BackupCount: int
+    Level: int
+    Debug: bool
+
+    def __post_init__(self):
+        if not isinstance(self.Name, str):
+            raise ValueError("The logger name must be a string.")
+        if not isinstance(self.Path, str):
+            raise ValueError("The logger path must be a string.")
+        if not isinstance(self.BackupCount, int):
+            raise ValueError("The logger backup count must be an integer.")
+        if not isinstance(self.Level, int):
+            raise ValueError("The logger level must be an integer.")
+        if not isinstance(self.Debug, bool):
+            raise ValueError("The logger debug mode must be a boolean.")
 
 
 class TheSeedCoreLogger(logging.Logger):

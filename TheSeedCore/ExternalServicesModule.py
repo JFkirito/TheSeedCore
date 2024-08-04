@@ -1,37 +1,43 @@
 # -*- coding: utf-8 -*-
 """
-TheSeedCore External Services Module
+TheSeedCore ExternalServices Module
 
-# This module specializes in managing and operating external services, with a focus on Node.js-related functionalities.
-# It offers tools for installing Node.js packages and managing Node.js application services, making it ideal for environments
-# that require integration with Node.js, such as launching Node.js-based API services or managing Node.js tools and libraries.
+Module Description:
+This module manages external services
+It provides functionalities to install Node.js packages, start and stop services, and manage service outputs.
+The module is designed to be expandable, allowing for the integration of additional external services in the future.
 
-# Key Components:
-# 1. NodeService: Manages the installation of Node.js packages and the starting/stopping of Node.js application services.
-# It performs service operations asynchronously using subprocesses and threads, and includes integrated logging for tracking operations.
+Main Components:
+1. Logger Setup: Configures a default logger for external service operations to handle logging of operations and errors.
+2. NodeService Class: Manages the installation and execution of Node.js packages, providing methods to install packages, start services, stop services, and manage service outputs.
 
-# Module Functions:
-# - Installs Node.js packages to a specified path.
-# - Starts and stops Node.js application services, allowing for concurrent operations.
-# - Automatically logs detailed information about all operations, including outputs from installations and service activities.
-# - Checks the local installation status of Node.js, ensuring system readiness for Node.js operations.
+Module Functionality Overview:
+- Installs Node.js packages and manages their installation paths.
+- Starts and stops Node.js services, handling subprocess management.
+- Logs installation and service outputs for monitoring and debugging.
+- Ensures compatibility with various operating systems for Node.js management.
+- Provides a foundation for future expansion to include additional external services.
 
-# Usage Scenarios:
-# - Integrating Node.js package management within Python applications.
-# - Controlling backend services written in Node.js through a Python interface.
-# - Monitoring and logging the operational status of Node.js services within a system.
+Key Classes and Methods:
+- defaultLogger(): Configures and returns a logger for external service operations.
+- NodeService: Core class for managing Node.js package installation and service execution.
+  - installPackage(): Installs a specified Node.js package.
+  - startService(): Starts a specified Node.js service.
+  - stopService(): Stops a specified Node.js service.
+  - stopAllNodeService(): Stops all running Node.js services.
+  - _checkNodeInstalled(): Checks if Node.js is installed on the system.
+  - _installOutput(): Logs the output of the package installation process.
+  - _serviceOutput(): Logs the output of the running service.
 
-# Dependencies:
-# - subprocess: Handles the creation and management of subprocesses for executing Node.js commands.
-# - threading: Enables parallel thread execution, allowing the main application to operate without interruption.
-# - os: Manages file and directory operations, essential for handling installation paths.
-# - LoggerModule: Provides logging functionalities, crucial for operation tracking and auditing.
-
+Notes:
+- Ensure Node.js is installed on the system before using this module.
+- Configure package paths and logger settings as needed for your environment.
+- Utilize the NodeService class to manage Node.js packages and services.
+- Refer to the logging output for detailed information on service operations and errors.
+- This module is designed for future expansion to support additional external services.
 """
 
 from __future__ import annotations
-
-__all__ = ["NodeService"]
 
 import logging
 import os
@@ -39,8 +45,27 @@ import subprocess
 import threading
 from typing import TYPE_CHECKING, Union
 
+from . import _ColoredFormatter
+
 if TYPE_CHECKING:
     from .LoggerModule import TheSeedCoreLogger
+
+
+def defaultLogger(debug_mode: bool = False) -> logging.Logger:
+    logger = logging.getLogger(f'TheSeedCore - ExternalServices')
+    logger.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler()
+    if debug_mode:
+        console_handler.setLevel(logging.DEBUG)
+    else:
+        console_handler.setLevel(max(logging.DEBUG, logging.WARNING))
+
+    formatter = _ColoredFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(console_handler)
+    return logger
 
 
 class NodeService:
@@ -63,14 +88,14 @@ class NodeService:
     """
     _INSTANCE = None
 
-    def __new__(cls, DefaultInstallPath: str, Logger: Union[TheSeedCoreLogger, logging.Logger]):
+    def __new__(cls, DefaultInstallPath: str, Logger: Union[None, TheSeedCoreLogger, logging.Logger] = None, DebugMode: bool = False):
         if cls._INSTANCE is None:
             cls._INSTANCE = super(NodeService, cls).__new__(cls)
         return cls._INSTANCE
 
-    def __init__(self, DefaultInstallPath: str, Logger: Union[TheSeedCoreLogger, logging.Logger]):
+    def __init__(self, DefaultInstallPath: str, Logger: Union[TheSeedCoreLogger, logging.Logger], DebugMode: bool = False):
         self._DefaultInstallPath = DefaultInstallPath
-        self._Logger = Logger
+        self._Logger = defaultLogger(DebugMode) if Logger is None else Logger
         self._InstallPackageSubProcess = None
         self._InstallPackageThread = None
         self._ServiceSubProcess = {}
