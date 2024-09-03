@@ -1,41 +1,59 @@
 # -*- coding: utf-8 -*-
 """
-TheSeedCore Logger Module
+TheSeedCore LoggerModule
 
-Module Description:
-This module provides a comprehensive logging system for TheSeedCore, featuring color-formatted console output and non-colored file logging.
-It includes functionality for setting up and managing loggers with configurable parameters such as log levels, file paths, and debug modes.
-The module supports rotation of log files based on time intervals.
+######################################################################################################################################
+# This module provides a custom logging system for managing loggers with advanced features like
+# colorized console output, timed rotating file handlers, and debug mode control. It is designed
+# to be flexible and scalable, allowing easy integration into larger applications.
 
-Main Components:
-1. Logger Configuration: Defines a data class for configuring loggers, including name, path, backup count, log level, and debug mode.
-2. TheSeedCoreLogger Class: Implements the core logging functionalities, providing color-formatted console output and file logging.
-3. Utility Functions: Provides functions to set the debug mode for individual loggers or all loggers.
+# Main functionalities:
+# 1. Creation and configuration of custom loggers with support for timed rotating log files.
+# 2. Colorized console logging for better readability during development and debugging.
+# 3. Centralized control of debug mode for individual or all loggers.
+# 4. Persistent logging to disk with automatic log file management.
 
-Module Functionality Overview:
-- Configurable logging with support for colored console output and non-colored file logging.
-- Supports log file rotation based on time intervals.
-- Allows setting and updating log levels and debug modes dynamically.
-- Manages multiple loggers with unique configurations.
-- Ensures proper directory creation for log file storage.
+# Main components:
+# 1. LoggerConfig - A configuration class that holds logger settings such as name, path, log level, and debug mode.
+# 2. TheSeedCoreLogger - A custom logger class that manages log file handlers and console handlers.
+# 3. _ColorFormatter - A formatter that applies color to log messages based on their severity level.
+# 4. setDebugMode - A function to toggle debug mode for a specific logger.
+# 5. setAllDebugMode - A function to toggle debug mode for all active loggers.
 
-Key Classes and Methods:
-- LoggerConfig: Data class for logger configuration parameters.
-- TheSeedCoreLogger: Core logger class with color-formatted console output and file logging.
-  - _ColorFormatter: Formatter for colored console output.
-  - _FileFormatter: Formatter for non-colored file logging.
-  - DebugMode: Property to get or set the debug mode of the logger.
-- setDebugMode(): Sets the debug mode for a specific logger.
-- setAllDebugMode(): Sets the debug mode for all loggers.
+# Design thoughts:
+# 1. Custom and reusable logging system:
+#    a. The module is designed to provide a robust logging infrastructure that can be reused across different parts of the application.
+#    b. Each logger is configured with its own file handler and console handler, ensuring that logs are both saved and easily visible during development.
+#
+# 2. Enhanced readability through colorized logs:
+#    a. The console output is enhanced with color codes that highlight the severity of log messages, making it easier to identify issues at a glance.
+#    b. This is especially useful during development and debugging, where quick identification of errors and warnings is crucial.
+#
+# 3. Scalable debug mode management:
+#    a. The module provides centralized control over the debug mode, allowing for quick toggling of log verbosity across the entire application.
+#    b. This feature helps developers focus on relevant logs by adjusting the level of detail without modifying individual logger configurations.
+#
+# 4. Timed log rotation and backup:
+#    a. Log files are managed with a timed rotating handler that creates new log files at regular intervals (e.g., daily), preventing logs from growing too large.
+#    b. Old log files are automatically archived based on the backup count specified, ensuring that disk space is managed efficiently.
+#
+# 5. Error handling and configurability:
+#    a. The module includes error checking and validation during logger configuration, ensuring that only valid settings are applied.
+#    b. The loggers are highly configurable, allowing for different logging behaviors depending on the application's environment and needs.
 
-Notes:
-- Ensure the required directories for log file storage are created before initializing loggers.
-- Configure logger parameters appropriately in the LoggerConfig data class.
-- Utilize the utility functions to manage debug modes for loggers as needed.
-- Refer to the logging output for detailed information on log operations and errors.
+# Required dependencies:
+# 1. Python libraries: logging, os, dataclasses, typing.
+# 2. External libraries: colorama (for colorized console output).
+######################################################################################################################################
 """
-
 from __future__ import annotations
+
+__all__ = [
+    "LoggerConfig",
+    "TheSeedCoreLogger",
+    "setDebugMode",
+    "setAllDebugMode"
+]
 
 import logging
 import os
@@ -43,7 +61,7 @@ from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from typing import TYPE_CHECKING
 
-from colorama import Fore, Style
+from . import _ColoredFormatter
 
 if TYPE_CHECKING:
     pass
@@ -72,35 +90,13 @@ class LoggerConfig:
             raise ValueError("The logger debug mode must be a boolean.")
 
 
+class _FileFormatter(logging.Formatter):
+    def format(self, record):
+        message = super().format(record)
+        return message
+
+
 class TheSeedCoreLogger(logging.Logger):
-    """
-    TheSeedCore日志记录器。
-
-    提供具有颜色格式化功能的控制台输出和不带颜色格式化的文件记录功能。
-    """
-
-    class _ColorFormatter(logging.Formatter):
-        COLORS = {
-            logging.DEBUG: Fore.BLUE,
-            logging.INFO: Fore.GREEN,
-            logging.WARNING: Fore.YELLOW,
-            logging.ERROR: Fore.RED,
-            logging.CRITICAL: Fore.MAGENTA
-        }
-
-        def format(self, record):
-            color = self.COLORS.get(record.levelno, Fore.RESET)
-            message = super().format(record)
-            return f"{color}{Style.BRIGHT}{message}{Style.RESET_ALL}"
-
-    class _FileFormatter(logging.Formatter):
-        """
-        文件日志格式器，不包含颜色代码。
-        """
-
-        def format(self, record):
-            message = super().format(record)
-            return message
 
     def __new__(cls, Config: LoggerConfig):
         if Config.Name in _LOGGERS:
@@ -122,12 +118,12 @@ class TheSeedCoreLogger(logging.Logger):
         self._FileProcessor = TimedRotatingFileHandler(self._LogFile, when="midnight", interval=1, backupCount=Config.BackupCount, encoding="utf-8")
         self._FileProcessor.suffix = "%Y-%m-%d"
         self._FileProcessor.setLevel(Config.Level if Config.Debug else max(Config.Level, logging.WARNING))
-        self._FileFormatter = self._FileFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self._FileFormatter = _FileFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self._FileProcessor.setFormatter(self._FileFormatter)
         self.addHandler(self._FileProcessor)
 
         self._StreamProcessor = logging.StreamHandler()
-        self._ConsoleFormatter = self._ColorFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self._ConsoleFormatter = _ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self._StreamProcessor.setLevel(logging.DEBUG if Config.Debug else max(Config.Level, logging.WARNING))
         self._StreamProcessor.setFormatter(self._ConsoleFormatter)
         self.addHandler(self._StreamProcessor)
@@ -146,23 +142,10 @@ class TheSeedCoreLogger(logging.Logger):
 
 
 def setDebugMode(name: str, debug: bool):
-    """
-    设置日志记录器的调试模式。
-
-    参数：
-        :param name : 日志记录器的名称。
-        :param debug : 是否启用调试模式。
-    """
     if name in _LOGGERS:
         _LOGGERS[name].DebugMode = debug
 
 
 def setAllDebugMode(debug: bool):
-    """
-    设置所有日志记录器的调试模式。
-
-    参数：
-        :param debug : 是否启用调试模式。
-    """
     for logger in _LOGGERS.values():
         logger.DebugMode = debug

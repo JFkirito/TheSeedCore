@@ -1,43 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-TheSeedCore ExternalServices Module
-
-Module Description:
-This module manages external services
-It provides functionalities to install Node.js packages, start and stop services, and manage service outputs.
-The module is designed to be expandable, allowing for the integration of additional external services in the future.
-
-Main Components:
-1. Logger Setup: Configures a default logger for external service operations to handle logging of operations and errors.
-2. NodeService Class: Manages the installation and execution of Node.js packages, providing methods to install packages, start services, stop services, and manage service outputs.
-
-Module Functionality Overview:
-- Installs Node.js packages and manages their installation paths.
-- Starts and stops Node.js services, handling subprocess management.
-- Logs installation and service outputs for monitoring and debugging.
-- Ensures compatibility with various operating systems for Node.js management.
-- Provides a foundation for future expansion to include additional external services.
-
-Key Classes and Methods:
-- defaultLogger(): Configures and returns a logger for external service operations.
-- NodeService: Core class for managing Node.js package installation and service execution.
-  - installPackage(): Installs a specified Node.js package.
-  - startService(): Starts a specified Node.js service.
-  - stopService(): Stops a specified Node.js service.
-  - stopAllNodeService(): Stops all running Node.js services.
-  - _checkNodeInstalled(): Checks if Node.js is installed on the system.
-  - _installOutput(): Logs the output of the package installation process.
-  - _serviceOutput(): Logs the output of the running service.
-
-Notes:
-- Ensure Node.js is installed on the system before using this module.
-- Configure package paths and logger settings as needed for your environment.
-- Utilize the NodeService class to manage Node.js packages and services.
-- Refer to the logging output for detailed information on service operations and errors.
-- This module is designed for future expansion to support additional external services.
-"""
-
 from __future__ import annotations
+
+__all__ = [
+    "NodeService"
+]
 
 import logging
 import os
@@ -52,6 +18,27 @@ if TYPE_CHECKING:
 
 
 def defaultLogger(debug_mode: bool = False) -> logging.Logger:
+    """
+    创建一个用于日志记录的 Logger 实例，提供控制台日志输出，并根据调试模式设置日志级别。
+
+    参数：
+        :param debug_mode: 布尔值，指示是否启用调试模式。默认为 False。调试模式下，日志级别设置为 DEBUG，否则设置为 WARNING 或更高。
+
+    返回：
+        :return - logging.Logger : 配置好的 Logger 实例，用于记录日志信息。
+
+    执行过程：
+        1. 创建一个新的 Logger 实例，名称为 'TheSeedCore - ExternalServices'。
+        2. 设置 Logger 的日志级别为 DEBUG。
+        3. 创建一个 StreamHandler，用于将日志输出到控制台。
+        4. 根据 debug_mode 设置 StreamHandler 的日志级别。
+        5. 创建一个自定义的日志格式化器，并将其应用于 StreamHandler。
+        6. 将 StreamHandler 添加到 Logger 实例中。
+
+    异常：
+        1. 如果设置了无效的日志级别或格式化器，可能会导致日志无法正常输出。
+    """
+
     logger = logging.getLogger(f'TheSeedCore - ExternalServices')
     logger.setLevel(logging.DEBUG)
 
@@ -69,23 +56,6 @@ def defaultLogger(debug_mode: bool = False) -> logging.Logger:
 
 
 class NodeService:
-    """
-    TheSeedCore NodeService 管理 Node.js 包的安装和服务的启动和停止。
-
-    参数:
-        :param DefaultInstallPath : 默认的 Node.js 包安装路径。
-        :param Logger : 用于记录日志的对象。
-
-    属性:
-        - _INSTANCE : 单例实例。
-        - _DefaultInstallPath : 默认的 Node.js 包安装路径。
-        - _TaskManager : TheSeed 任务管理器。
-        - _Logger : 用于记录日志的对象。
-        - _InstallPackageSubProcess : 安装包的子进程。
-        - _InstallPackageThread : 安装包的线程。
-        - _ServiceSubProcess : 服务的子进程。
-        - _ServiceThread : 服务的线程。
-    """
     _INSTANCE = None
 
     def __new__(cls, DefaultInstallPath: str, Logger: Union[None, TheSeedCoreLogger, logging.Logger] = None, DebugMode: bool = False):
@@ -104,14 +74,31 @@ class NodeService:
 
     def installPackage(self, package_name: str, package_version: str = None, install_path: str = None, basic_logger=None):
         """
-        执行 Node.js 包的安装过程。
+        安装指定的 npm 包，并支持设置版本、安装路径和自定义日志记录器。支持异步处理安装输出。
 
-        参数:
-            :param package_name : 要安装的包名。
-            :param package_version : 包的版本。
-            :param install_path : 安装路径。
-            :param basic_logger : 用于记录安装过程的日志对象。
+        参数：
+            :param package_name: 要安装的 npm 包的名称。
+            :param package_version: 要安装的 npm 包的版本。如果为 None，则安装最新版本。默认为 None。
+            :param install_path: 安装路径。如果为 None，则使用默认安装路径。默认为 None。
+            :param basic_logger: 用于记录日志的 Logger 实例。如果为 None，则使用类实例的默认 Logger。默认为 None。
+
+        返回：
+            无
+
+        执行过程：
+            1. 根据是否提供基本日志记录器选择使用默认 Logger 或提供的 Logger。
+            2. 确定安装路径，如果未提供，则使用默认安装路径。
+            3. 创建安装路径目录（如果不存在的话）。
+            4. 确定包的版本，如果未提供，则默认为 "latest"。
+            5. 构造安装命令，并通过 subprocess.Popen 启动安装进程。
+            6. 启动一个线程处理安装过程的输出。
+            7. 等待安装线程完成。
+            8. 记录安装成功的日志信息。
+
+        异常：
+            1. 如果安装过程中发生异常，则记录错误信息。
         """
+
         if basic_logger is None:
             logger = self._Logger
         else:
@@ -140,22 +127,37 @@ class NodeService:
             )
             self._InstallPackageThread = threading.Thread(target=self._installOutput)
             self._InstallPackageThread.start()
-            logger.info(f"NodeService install package success : {package_name} has been installed")
             self._InstallPackageThread.join()
+            logger.info(f"NodeService install package success : {package_name} has been installed")
         except Exception as e:
             logger.error(f"NodeService install {package_name} package error : {str(e)}")
 
     def startService(self, package_name: str, application: str, application_path: str = None, node_path: str = None, basic_logger=None, *args, **kwargs):
         """
-        启动指定的 Node.js 应用服务。
+        启动指定的 Node.js 服务进程，并支持设置应用程序路径、Node.js 路径以及自定义日志记录器。支持异步处理服务输出。
 
-        参数:
-            :param package_name : 包名。
-            :param application : 应用名称。
-            :param application_path : 应用的具体路径。
-            :param node_path : Node.js的执行路径。
-            :param basic_logger : 日志记录器。
+        参数：
+            :param package_name: 要启动服务的 npm 包的名称。
+            :param application: 要启动的 Node.js 应用程序的名称。
+            :param application_path: 应用程序的路径。如果为 None，则使用默认安装路径。默认为 None。
+            :param node_path: Node.js 的路径。如果为 None，则使用默认的 "node"。默认为 None。
+            :param basic_logger: 用于记录日志的 Logger 实例。如果为 None，则使用类实例的默认 Logger。默认为 None。
+            :param args: 传递给 subprocess.Popen 的额外位置参数。
+            :param kwargs: 传递给 subprocess.Popen 的额外关键字参数。
+
+        返回：
+            无
+
+        执行过程：
+            1. 确定应用程序路径，如果未提供，则使用默认路径。
+            2. 确定 Node.js 路径，如果未提供，则默认为 "node"。
+            3. 启动一个 subprocess 进程来运行 Node.js 服务，并将其输出重定向到管道。
+            4. 启动一个线程来处理服务进程的输出。
+
+        异常：
+            1. 如果启动服务过程中发生异常，则记录错误信息。
         """
+
         try:
             if application_path is None:
                 _app_path = os.path.join(self._DefaultInstallPath, package_name, "node_modules", package_name, application)
@@ -182,12 +184,24 @@ class NodeService:
 
     def stopService(self, package_name: str, basic_logger=None):
         """
-        停止指定的 Node.js 服务。
+        停止指定的 Node.js 服务进程，并清理相关资源。
 
-        参数:
-            :param package_name : 包名。
-            :param basic_logger : 日志记录器。
+        参数：
+            :param package_name: 要停止服务的 npm 包的名称。
+            :param basic_logger: 用于记录日志的 Logger 实例。如果为 None，则使用类实例的默认 Logger。默认为 None。
+
+        返回：
+            无
+
+        执行过程：
+            1. 终止指定的服务进程。
+            2. 等待服务线程结束。
+            3. 从内部字典中移除服务进程和服务线程的记录。
+
+        异常：
+            1. 如果停止服务过程中发生异常，则记录错误信息。
         """
+
         if basic_logger is None:
             logger = self._Logger
         else:
@@ -202,7 +216,25 @@ class NodeService:
             logger.error(f"NodeService stop {package_name} service error : {str(e)}")
 
     def stopAllNodeService(self):
-        """停止所有的 Node.js 服务。"""
+        """
+        停止所有正在运行的 Node.js 服务进程，并清理相关资源。
+
+        参数：
+            无
+
+        返回：
+            无
+
+        执行过程：
+            1. 终止所有在 `_ServiceSubProcess` 字典中记录的服务进程。
+            2. 等待所有服务线程结束。
+            3. 清空 `_ServiceSubProcess` 和 `_ServiceThread` 字典。
+            4. 设置 `IsClosed` 为 `True`。
+
+        异常：
+            1. 如果在停止服务过程中发生异常，则记录错误信息。
+        """
+
         try:
             if self._ServiceSubProcess:
                 for package_name in self._ServiceSubProcess.keys():
@@ -218,11 +250,23 @@ class NodeService:
     @staticmethod
     def _checkNodeInstalled():
         """
-        检查系统中是否已安装 Node.js。
+        检查 Node.js 是否已安装在系统中。
 
-        返回:
-            :return : 如果已安装 Node.js，则返回 True，否则返回 False。
+        参数：
+            无
+
+        返回：
+            bool: 如果 Node.js 已安装，返回 `True`；否则返回 `False`。
+
+        执行过程：
+            1. 使用 `subprocess.run` 执行 `node --version` 命令检查 Node.js 的版本。
+            2. 如果命令成功执行（返回码为 0），则返回 `True`。
+            3. 如果命令执行失败或文件未找到，则返回 `False`。
+
+        异常：
+            1. 如果系统无法找到 `node` 命令，会捕捉 `FileNotFoundError` 异常，并返回 `False`。
         """
+
         try:
             result = subprocess.run(["node", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode == 0:
@@ -234,11 +278,25 @@ class NodeService:
 
     def _installOutput(self, basic_logger=None):
         """
-        监听和记录安装过程中的输出。
+        处理并记录安装过程的输出。
 
-        参数:
-            :param basic_logger : 用于记录安装输出的日志对象，如果未提供，则使用默认日志记录器。
+        参数：
+            basic_logger (logging.Logger, 可选): 自定义的日志记录器。如果为 `None`，则使用默认日志记录器。
+
+        返回：
+            无
+
+        执行过程：
+            1. 检查是否提供了自定义日志记录器，使用自定义日志记录器或默认日志记录器。
+            2. 持续读取并记录安装进程的标准输出，直到进程结束。
+            3. 捕捉并记录处理输出过程中出现的异常。
+            4. 在安装输出线程结束时，关闭标准输出流，并将 `self._InstallPackageSubProcess` 设为 `None`。
+            5. 将 `self._InstallPackageThread` 设为 `None`，并记录安装输出线程已关闭。
+
+        异常：
+            1. 捕捉并记录读取或处理输出时发生的异常。
         """
+
         if basic_logger is None:
             logger = self._Logger
         else:
@@ -259,12 +317,25 @@ class NodeService:
 
     def _serviceOutput(self, package_name: str, basic_logger=None):
         """
-        处理和记录服务运行时的输出。
+        处理并记录服务进程的标准输出。
 
-        参数:
-            :param package_name : 包名。
-            :param basic_logger : 日志记录器。
+        参数：
+            :param package_name: 服务的包名称，用于从 `_ServiceSubProcess` 中获取相应的进程。
+            :param basic_logger: 自定义的日志记录器。如果为 `None`，则使用默认日志记录器。
+
+        返回：
+            无
+
+        执行过程：
+            1. 检查是否提供了自定义日志记录器，使用自定义日志记录器或默认日志记录器。
+            2. 持续读取并记录指定服务进程的标准输出，直到进程结束。
+            3. 捕捉并记录处理输出过程中出现的异常。
+            4. 在服务输出线程结束时，关闭标准输出流，并将 `self._ServiceThread[package_name]` 设为 `None`。
+
+        异常：
+            1. 捕捉并记录读取或处理输出时发生的异常。
         """
+
         if basic_logger is None:
             logger = self._Logger
         else:

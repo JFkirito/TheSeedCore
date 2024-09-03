@@ -1,62 +1,60 @@
 # -*- coding: utf-8 -*-
 """
-TheSeedCore KafkaService Module
+TheSeedCore KafkaServiceModule
 
-Module Description:
-This module provides a comprehensive service for managing Apache Kafka clusters.
-It includes functionalities for adding and configuring clusters, creating producers and consumers, managing Kafka topics, and handling message sending and receiving.
-The module ensures robust error handling and logging for all operations, and it is designed to support future extensions for additional Kafka-related functionalities.
+######################################################################################################################################
+# This module provides a Kafka service that facilitates the management of Kafka clusters,
+# producers, consumers, and topics. It is designed to support robust communication and data
+# streaming through Kafka, with features for monitoring and controlling Kafka resources.
 
-Main Components:
-1. Dependency Check and Import: Checks and imports necessary modules and libraries such as kafka-python.
-2. Logger Setup: Configures a default logger for Kafka service operations to handle logging of operations and errors.
-3. KafkaService Class: Manages Kafka clusters, producers, and consumers, providing methods to perform various Kafka operations.
+# Main functionalities:
+# 1. Manage Kafka clusters, including adding and updating configurations.
+# 2. Create and manage Kafka producers and consumers for message streaming.
+# 3. Create, configure, and monitor Kafka topics.
+# 4. Send and receive messages with serialization support using Kafka.
+# 5. Monitor cluster health, manage offsets, and handle Kafka consumer groups.
 
-Module Functionality Overview:
-- Manages Kafka clusters including adding clusters, updating configurations, and monitoring cluster health.
-- Creates and manages Kafka producers and consumers for different clusters.
-- Supports creation, listing, and configuration of Kafka topics.
-- Handles sending and receiving messages with detailed logging and error handling.
-- Provides utility functions to manage offsets and consumer groups.
-- Ensures compatibility with various Kafka configurations and settings.
+# Main components:
+# 1. KafkaService - Manages the lifecycle and interactions with Kafka clusters, producers, consumers, and topics.
+# 2. defaultLogger - Provides custom logging functionality for Kafka service operations.
 
-Key Classes and Methods:
-- _checkDependencies(): Checks and imports module dependencies.
-- defaultLogger(): Configures and returns a logger for Kafka service operations.
-- KafkaService: Core class for managing Kafka clusters and operations.
-  - addCluster(): Adds a new Kafka cluster with optional admin configurations.
-  - updateClusterConfig(): Updates the configuration for a specific Kafka cluster.
-  - monitorCluster(): Monitors the status of a specific Kafka cluster.
-  - createProducer(): Creates a Kafka producer for a specific cluster.
-  - createConsumer(): Creates a Kafka consumer for a specific cluster.
-  - createTopic(): Creates a Kafka topic in a specific cluster.
-  - sendMessage(): Sends a message to a Kafka topic.
-  - receiveMessage(): Receives messages from a Kafka topic.
-  - onSendSuccess(): Callback for successful message sending.
-  - onSendError(): Callback for errors in message sending.
-  - closeSingleProducer(): Closes a specific Kafka producer.
-  - closeSingleConsumer(): Closes a specific Kafka consumer.
-  - closeAllProducers(): Closes all producers in a specific cluster.
-  - closeAllConsumers(): Closes all consumers in a specific cluster.
-  - closeAllClusters(): Closes all clusters and their producers and consumers.
-  - getProducer(): Retrieves a specific Kafka producer.
-  - getConsumer(): Retrieves a specific Kafka consumer.
-  - listTopics(): Lists all topics in a specific cluster.
-  - listConsumerGroups(): Lists all consumer groups in a specific cluster.
-  - describeConsumerGroup(): Describes a specific consumer group.
-  - alterTopicConfig(): Alters the configuration of a specific Kafka topic.
-  - getOffsets(): Retrieves offsets for a specific topic partition.
-  - setOffsets(): Sets offsets for a specific topic partition.
-  - checkHealth(): Checks the health of a specific Kafka cluster.
-
-Notes:
-- Ensure all necessary dependencies (kafka-python, etc.) are installed before using this module.
-- Configure Kafka cluster parameters appropriately in the addCluster and updateClusterConfig methods.
-- Utilize the KafkaService class to manage Kafka clusters and perform various operations.
-- Refer to the logging output for detailed information on Kafka operations and errors.
+# Design thoughts:
+# 1. Centralized Kafka management:
+#    a. The module is designed to manage multiple Kafka clusters and their associated resources
+#       (producers, consumers, topics) from a single service instance.
+#    b. It allows for easy scaling and management of Kafka resources across different environments.
+#
+# 2. Resilience and error handling:
+#    a. Extensive error handling is implemented across all Kafka operations, ensuring that issues
+#       are logged and do not cause the system to fail unexpectedly.
+#    b. Callback mechanisms are provided for successful and failed message deliveries, allowing for
+#       more granular control over the message lifecycle.
+#
+# 3. Monitoring and configuration:
+#    a. The service includes tools for monitoring Kafka clusters, including metrics collection and
+#       health checks, to ensure that the Kafka environment is operating optimally.
+#    b. Configuration management is made easy with methods to update and monitor cluster configurations,
+#       as well as alter topic settings dynamically.
+#
+# 4. Scalability and performance:
+#    a. The service supports the creation of multiple producers and consumers within a Kafka cluster,
+#       allowing for high-throughput message streaming.
+#    b. The service is optimized for performance with the use of asynchronous messaging and efficient
+#       resource management.
+#
+# 5. Integration and extensibility:
+#    a. The service is designed to integrate easily with other components and services, providing
+#       a flexible API for interacting with Kafka resources.
+#    b. The module can be extended to support additional Kafka features or
+######################################################################################################################################
 """
 
 from __future__ import annotations
+
+__all__ = [
+    "KafkaService",
+    "KafkaSupport"
+]
 
 import logging
 import pickle
@@ -68,22 +66,7 @@ from . import _ColoredFormatter
 if TYPE_CHECKING:
     from .LoggerModule import TheSeedCoreLogger
 
-_KafkaSupport = False
-
-
-def _checkDependencies():
-    global _KafkaSupport
-    try:
-        # noinspection PyUnresolvedReferences
-        from kafka import KafkaProducer, KafkaConsumer, KafkaAdminClient, TopicPartition
-        # noinspection PyUnresolvedReferences
-        from kafka.admin import NewTopic, ConfigResource, ConfigResourceType
-        _KafkaSupport = True
-    except ImportError as _:
-        _KafkaSupport = False
-
-
-_checkDependencies()
+KafkaSupport = False
 
 
 def defaultLogger(debug_mode: bool = False) -> logging.Logger:
@@ -103,11 +86,20 @@ def defaultLogger(debug_mode: bool = False) -> logging.Logger:
     return logger
 
 
-if _KafkaSupport:
+try:
     # noinspection PyUnresolvedReferences
     from kafka import KafkaProducer, KafkaConsumer, KafkaAdminClient, TopicPartition
     # noinspection PyUnresolvedReferences
     from kafka.admin import NewTopic, ConfigResource, ConfigResourceType
+except ImportError:
+    class KafkaService:
+        INSTANCE: KafkaService = None
+
+        # noinspection PyUnusedLocal
+        def __init__(self, Logger: Union[None, TheSeedCoreLogger, logging.Logger] = None, DebugMode: bool = False):
+            raise ImportError("The kafka-python is not installed. Please install it using 'pip install kafka-python'.")
+else:
+    KafkaSupport = True
 
 
     class KafkaService:
@@ -116,6 +108,7 @@ if _KafkaSupport:
 
         def __new__(cls, Logger: Union[None, TheSeedCoreLogger, logging.Logger] = None, DebugMode: bool = False, *args, **kwargs):
             if cls.INSTANCE is None:
+                # noinspection PySuperArguments
                 cls.INSTANCE = super(KafkaService, cls).__new__(cls)
             return cls.INSTANCE
 
@@ -147,7 +140,6 @@ if _KafkaSupport:
                 self._Logger.error(f"Update cluster config failed: Cluster {cluster_id} not found.")
 
         def monitorCluster(self, cluster_id: str):
-            """监控集群状态"""
             if cluster_id in self._Clusters:
                 try:
                     admin_client = self._Clusters[cluster_id]["admin_client"]
