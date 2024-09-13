@@ -9,9 +9,10 @@ async def testFunction():
         await asyncio.sleep(1)
         print("System shutdown countdown:", 10 - i)
     print("System shutdown")
-    linkStop()
+    LinkStop()
 
 
 if __name__ == "__main__":
+    ConnectNERvGear()
     MainEventLoop.create_task(testFunction())
-    linkStart()
+    LinkStart()
