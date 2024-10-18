@@ -71,8 +71,7 @@ __all__ = [
     'DATABASE_PATH',
     'LOGS_PATH',
     # ConcurrentSystem Module
-    'ConcurrentSystemConfig',
-    'ConcurrentSystem',
+    'ConcurrentSystemModule',
     # Database Module
     'SQLiteDatabaseConfig',
     'BasicSQLiteDatabase',
@@ -109,14 +108,30 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from art import text2art
-from colorama import init, Fore, Style
+from .ConcurrentSystemModule import QApplication
 
 if TYPE_CHECKING:
     pass
 
 sys.set_int_max_str_digits(100000)
-init(autoreset=True)
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+PURPLE = "\033[35m"
+CYAN = "\033[36m"
+WHITE = "\033[37m"
+
+RED_BOLD = "\033[1m\033[31m"
+GREEN_BOLD = "\033[1m\033[32m"
+YELLOW_BOLD = "\033[1m\033[33m"
+BLUE_BOLD = "\033[1m\033[34m"
+PURPLE_BOLD = "\033[1m\033[35m"
+CYAN_BOLD = "\033[1m\033[36m"
+WHITE_BOLD = "\033[1m\033[37m"
+
+RESET = "\033[0m"
+
 MainEventLoop = asyncio.get_event_loop()
 SYSTEM_PATH = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXTERNAL_LIBRARY_PATH = os.path.join(SYSTEM_PATH, "ExternalLibrary")
@@ -140,19 +155,53 @@ for path in _BasicPath.values():
 
 
 class _ColoredFormatter(logging.Formatter):
+    """
+    Custom logging formatter that adds color to log messages based on their severity level.
+
+    This class extends `logging.Formatter` to enhance the readability of log outputs by using ANSI escape sequences for colored text.
+
+    Attributes:
+        COLORS: A dictionary mapping log levels to their corresponding ANSI color codes.
+        RESET: ANSI code to reset text formatting.
+
+    Methods:
+        format: Overrides the default format method to apply color to log messages based on their severity level.
+
+    Notes:
+        - The formatter improves log visibility in terminal outputs, making it easier to distinguish between different log levels.
+        - The colors used correspond to standard practices for log severity, with blue for DEBUG, green for INFO, yellow for WARNING, and red for ERROR.
+    """
+
+    COLORS = {
+        logging.DEBUG: "\033[1;34m",
+        logging.INFO: "\033[1;32m",
+        logging.WARNING: "\033[1;33m",
+        logging.ERROR: "\033[0;31m",
+    }
+    RESET = "\033[0m"
+
     def format(self, record):
-        log_colors = {
-            logging.DEBUG: Fore.CYAN + Style.BRIGHT,
-            logging.INFO: Fore.GREEN + Style.BRIGHT,
-            logging.WARNING: Fore.YELLOW + Style.BRIGHT,
-            logging.ERROR: Fore.RED + Style.BRIGHT,
-            logging.CRITICAL: Fore.RED + Style.BRIGHT + Style.BRIGHT
-        }
-        color = log_colors.get(record.levelno, Fore.WHITE)
-        record.msg = color + str(record.msg) + Style.RESET_ALL
-        record.levelname = color + record.levelname + Style.RESET_ALL
-        formatted_message = super().format(record)
-        return color + formatted_message + Style.RESET_ALL
+        """
+        Formats log messages with color based on their severity level.
+
+        :param record: The log record containing information about the log message.
+
+        :return: A formatted string representing the log message, with color applied based on the log level.
+
+        steps:
+            1. Call the superclass's format method to get the base message from the log record.
+            2. Retrieve the appropriate color for the log level from the COLORS dictionary:
+                - If the log level is not found in COLORS, use the default reset color.
+            3. Return the formatted message wrapped in the corresponding color codes, followed by a reset code.
+
+        Notes:
+            - This method enhances log visibility by adding color coding to different levels of log messages (e.g., DEBUG, WARNING, ERROR).
+            - It improves readability and helps quickly identify the severity of log messages in the console output.
+        """
+
+        message = super().format(record)
+        color = self.COLORS.get(record.levelno, self.RESET)
+        return f"{color}{message}{self.RESET}"
 
 
 from .ConcurrentSystemModule import *
@@ -168,53 +217,59 @@ if PySide6Support or PyQt5Support or PyQt6Support:
 
 
 def _showBanner():
-    banner = text2art("TheSeedCore", font="slant", chr_ignore=True)
-    print(Fore.MAGENTA + Style.BRIGHT + banner)
-    print(Fore.MAGENTA + Style.BRIGHT + f"TheSeedCore version: {__version__} - PID - [{os.getpid()}]")
-    print(Fore.MAGENTA + Style.BRIGHT + f"Latest repositories address {__repository__}\n")
+    print(PURPLE_BOLD + "  ______    __           _____                   __   ______                     ")
+    print(PURPLE_BOLD + " /_  __/   / /_   ___   / ___/  ___   ___   ____/ /  / ____/  ____    _____  ___ ")
+    print(PURPLE_BOLD + "  / /     / __ \\ / _ \\  \\__ \\  / _ \\ / _ \\ / __  /  / /      / __ \\  / ___/ / _ \\")
+    print(PURPLE_BOLD + " / /     / / / //  __/ ___/ / /  __//  __// /_/ /  / /___   / /_/ / / /    /  __/")
+    print(PURPLE_BOLD + "/_/     /_/ /_/ \\___/ /____/  \\___/ \\___/ \\__,_/   \\____/   \\____/ /_/     \\___/ ")
+    print(PURPLE_BOLD + "                                                                                 " + RESET)
+    print(PURPLE_BOLD + f"\nTheSeedCore version: {__version__}" + RESET)
+    print(PURPLE_BOLD + f"MainProcess PID - [{os.getpid()}]" + RESET)
+    print(PURPLE_BOLD + f"ServiceProcess PID - [{ConcurrentSystem.serviceProcessPID()}]" + RESET)
+    print(PURPLE_BOLD + f"Latest repositories address {__repository__}" + RESET)
 
 
 def _showSupportInfo(QtSupport):
     if not QtSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[QtSupport] Qt or QApplication is not available, Deny QtMode. If you want to support QtMode, please install [PySide6] or [PyQt6] or [PyQt5]")
+        print(YELLOW_BOLD + "[QtSupport] Qt or QApplication is not available, Deny QtMode. If you want to support QtMode, please install [PySide6] or [PyQt6] or [PyQt5]" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[QtSupport] Qt is available, Allow Qt Mode")
-    if not PyTorchSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[PyTorchSupport] PyTorch or CUDA is not available, Deny GPU Boost.")
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "[PyTorchSupport] If you want to support GPU Boost, please use [pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121] command to install PyTorch")
+        print(GREEN_BOLD + "[QtSupport] Qt is available, Allow Qt Mode" + RESET)
+    if not bool(PyTorchSupport.value):
+        print(YELLOW_BOLD + "[PyTorchSupport] PyTorch or CUDA is not available, Deny GPU Boost." + RESET)
+        print(YELLOW_BOLD + "[PyTorchSupport] If you want to support GPU Boost, please use [pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121] command to install PyTorch" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[PyTorchSupport] PyTorch and CUDA is available, Allow GPU Boost")
+        print(GREEN_BOLD + "[PyTorchSupport] PyTorch and CUDA is available, Allow GPU Boost" + RESET)
     if not MySQLSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[MySQLSupport] MySQL is not available, Deny MySQL Support. If you want to support MySQL, please install [mysql-connector-python]")
+        print(YELLOW_BOLD + "[MySQLSupport] MySQL is not available, Deny MySQL Support. If you want to support MySQL, please install [mysql-connector-python]" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[MySQLSupport] MySQL is available, Allow MySQL Support")
+        print(GREEN_BOLD + "[MySQLSupport] MySQL is available, Allow MySQL Support" + RESET)
     if not RedisSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[RedisSupport] Redis is not available, Deny Redis Support. If you want to support Redis, please install [redis]")
+        print(YELLOW_BOLD + "[RedisSupport] Redis is not available, Deny Redis Support. If you want to support Redis, please install [redis]" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[RedisSupport] Redis is available, Allow Redis Support")
+        print(GREEN_BOLD + "[RedisSupport] Redis is available, Allow Redis Support" + RESET)
     if not EncryptSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[EncryptSupport] Encryptor is not available, Deny Encrypt Support. If you want to support Encryptor, please install [keyring, pycryptodome]")
+        print(YELLOW_BOLD + "[EncryptSupport] Encryptor is not available, Deny Encrypt Support. If you want to support Encryptor, please install [keyring, pycryptodome]" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[EncryptSupport] Encryptor is available, Allow Encrypt Support")
+        print(GREEN_BOLD + "[EncryptSupport] Encryptor is available, Allow Encrypt Support" + RESET)
     if not KafkaSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[KafkaSupport] Kafka is not available, Deny Kafka Support. If you want to support Kafka, please install [kafka-python]")
+        print(YELLOW_BOLD + "[KafkaSupport] Kafka is not available, Deny Kafka Support. If you want to support Kafka, please install [kafka-python]" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[KafkaSupport] Kafka is available, Allow Kafka Support")
+        print(GREEN_BOLD + "[KafkaSupport] Kafka is available, Allow Kafka Support" + RESET)
     if not NetWorkServiceSupport:
-        print(Fore.LIGHTYELLOW_EX + Style.BRIGHT + "\n[NetWorkServiceSupport] Network Service is not available, Deny Network Service Support. If you want to support Network Service, please install [aiohttp, certifi, websockets]\n")
+        print(YELLOW_BOLD + "[NetWorkServiceSupport] Network Service is not available, Deny Network Service Support. If you want to support Network Service, please install [aiohttp, certifi, websockets]\n" + RESET)
     else:
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "\n[NetWorkServiceSupport] Network Service is available, Allow Network Service Support\n")
+        print(GREEN_BOLD + "[NetWorkServiceSupport] Network Service is available, Allow Network Service Support\n" + RESET)
 
 
-def ConnectNERvGear(concurrent_config: ConcurrentSystemConfig = None, check_env_support=True, debug_mode: bool = False):
+def ConnectNERvGear(check_env_support=True, **kwargs):
     if check_env_support:
         if _AllowQtMode and QApplication.instance():
             _showSupportInfo(True)
         else:
             _showSupportInfo(False)
+    ConnectConcurrentSystem(**kwargs)
     _showBanner()
-    ConnectConcurrentSystem(concurrent_config, debug_mode)
-    print(Fore.LIGHTGREEN_EX + Style.BRIGHT + f"\nNERvGear connection completed. Waiting for link start...")
+    print(GREEN_BOLD + f"NERvGear connection completed. Waiting for link start..." + RESET)
 
 
 def LinkStart():
@@ -225,12 +280,13 @@ def LinkStart():
             import qasync
             MainEventLoop = qasync.QEventLoop(QApplication.instance())
             asyncio.set_event_loop(MainEventLoop)
+            # noinspection PyUnresolvedReferences
             QApplication.instance().aboutToQuit.connect(LinkStop)
             _QtMode = True
-            print(Fore.LIGHTGREEN_EX + Style.BRIGHT + f"\nTheSeedCore connection completed. System standing by...\n")
+            print(GREEN_BOLD + f"TheSeedCore connection completed. System standing by..." + RESET)
             MainEventLoop.run_forever()
         else:
-            print(Fore.LIGHTGREEN_EX + Style.BRIGHT + f"\nTheSeedCore connection completed. System standing by...\n")
+            print(GREEN_BOLD + f"TheSeedCore connection completed. System standing by..." + RESET)
             MainEventLoop.run_forever()
     except (KeyboardInterrupt, SystemExit):
         pass

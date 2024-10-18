@@ -61,8 +61,6 @@ from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from typing import TYPE_CHECKING
 
-from . import _ColoredFormatter
-
 if TYPE_CHECKING:
     pass
 
@@ -96,10 +94,20 @@ class _FileFormatter(logging.Formatter):
         return message
 
 
+class _ColoredFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[1;34m",
+        logging.INFO: "\033[1;32m",
+        logging.WARNING: "\033[1;33m",
+        logging.ERROR: "\033[0;31m",
+    }
+    RESET = "\033[0m"
+
+
 class TheSeedCoreLogger(logging.Logger):
 
     def __new__(cls, Config: LoggerConfig):
-        if Config.Name in _LOGGERS:
+        if Config.Name in _LOGGERS.keys():
             return _LOGGERS[Config.Name]
         else:
             instance = super(TheSeedCoreLogger, cls).__new__(cls)
@@ -108,24 +116,24 @@ class TheSeedCoreLogger(logging.Logger):
 
     def __init__(self, Config: LoggerConfig):
         super().__init__(Config.Name, Config.Level)
-        self._LoggerPath = Config.Path
+        self._LogPath = Config.Path
         self._Debug = Config.Debug
 
-        if not os.path.exists(self._LoggerPath):
-            os.makedirs(self._LoggerPath)
+        if not os.path.exists(self._LogPath):
+            os.makedirs(self._LogPath)
 
-        self._LogFile = os.path.join(self._LoggerPath, f"{Config.Name}.log")
+        self._LogFile = os.path.join(self._LogPath, f"{Config.Name}.log")
         self._FileProcessor = TimedRotatingFileHandler(self._LogFile, when="midnight", interval=1, backupCount=Config.BackupCount, encoding="utf-8")
+        self._FileFormatter = _FileFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self._FileProcessor.suffix = "%Y-%m-%d"
         self._FileProcessor.setLevel(Config.Level if Config.Debug else max(Config.Level, logging.WARNING))
-        self._FileFormatter = _FileFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self._FileProcessor.setFormatter(self._FileFormatter)
         self.addHandler(self._FileProcessor)
 
         self._StreamProcessor = logging.StreamHandler()
-        self._ConsoleFormatter = _ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self._StreamFormatter = _ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self._StreamProcessor.setLevel(logging.DEBUG if Config.Debug else max(Config.Level, logging.WARNING))
-        self._StreamProcessor.setFormatter(self._ConsoleFormatter)
+        self._StreamProcessor.setFormatter(self._StreamFormatter)
         self.addHandler(self._StreamProcessor)
 
     @property
