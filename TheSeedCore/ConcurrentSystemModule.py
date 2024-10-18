@@ -207,6 +207,7 @@ __all__ = [
     "PySide6Support",
     "PyQt6Support",
     "PyQt5Support",
+    "QApplication"
 ]
 
 import asyncio
@@ -232,7 +233,6 @@ if TYPE_CHECKING:
     pass
 
 _SystemType = platform.system()
-_MainEventLoop: Optional[asyncio.AbstractEventLoop] = None
 _IsMainProcess = True if multiprocessing.current_process().name == 'MainProcess' else False
 _AvailableCUDADevicesID: list = []
 PyTorchSupport: multiprocessing.Value = multiprocessing.Value('b', False)
@@ -5250,7 +5250,6 @@ class ConcurrentSystem:
 
     _INSTANCE: ConcurrentSystem = None
     _INITIALIZED: bool = False
-    MainEventLoop: asyncio.AbstractEventLoop = None
 
     def __new__(cls, SM: _SynchronizationManager = None, CM: _ConfigManager = None, DebugMode: bool = False):
         if cls._INSTANCE is None:
@@ -5260,7 +5259,6 @@ class ConcurrentSystem:
     def __init__(self, SM: _SynchronizationManager = None, CM: _ConfigManager = None, DebugMode: bool = False):
         if ConcurrentSystem._INITIALIZED:
             return
-        ConcurrentSystem.MainEventLoop = _MainEventLoop
         self._SynchronizationManager = SM
         self._ConfigManager = CM
         self._DebugMode = DebugMode
@@ -5528,8 +5526,6 @@ class ConcurrentSystem:
         cls._INSTANCE._SystemThreadPoolExecutor.shutdown(wait=True, cancel_futures=True)
         if cls._INSTANCE._ConfigManager.CoreProcessCount.value != 0:
             cls._INSTANCE._SystemProcessPoolExecutor.shutdown(wait=True, cancel_futures=True)
-        if not cls._INSTANCE._QtMode:
-            cls.MainEventLoop.stop()
         del cls._INSTANCE
 
     def _setLogger(self) -> logging.Logger:
@@ -5745,19 +5741,10 @@ def ConnectConcurrentSystem(**kwargs) -> ConcurrentSystem:
         - 3. Instantiate the ConcurrentSystem with the created managers and configuration
     """
 
-    global _MainEventLoop
     _development_env = not hasattr(sys, "frozen") and not globals().get("__compiled__", False)
     _debug_mode = kwargs.get('DebugMode', _development_env)
     if not isinstance(_debug_mode, bool):
         raise TypeError("DebugMode must be a boolean.")
-    # noinspection PyUnresolvedReferences
-    if QApplication is not None and QApplication.instance():
-        # noinspection PyUnresolvedReferences
-        _MainEventLoop = qasync.QEventLoop(QApplication.instance())
-        # noinspection PyUnresolvedReferences
-        QApplication.instance().aboutToQuit.connect(ConcurrentSystem.closeSystem)
-    else:
-        _MainEventLoop = asyncio.get_event_loop()
     # noinspection PyTypeChecker
     _config = _Config(
         Priority=kwargs.get('Priority', "NORMAL"),

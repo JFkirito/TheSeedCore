@@ -71,7 +71,8 @@ __all__ = [
     'DATABASE_PATH',
     'LOGS_PATH',
     # ConcurrentSystem Module
-    'ConcurrentSystemModule',
+    'ConcurrentSystem',
+    'TaskFuture',
     # Database Module
     'SQLiteDatabaseConfig',
     'BasicSQLiteDatabase',
@@ -108,8 +109,6 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from .ConcurrentSystemModule import QApplication
-
 if TYPE_CHECKING:
     pass
 
@@ -131,7 +130,6 @@ CYAN_BOLD = "\033[1m\033[36m"
 WHITE_BOLD = "\033[1m\033[37m"
 
 RESET = "\033[0m"
-
 MainEventLoop = asyncio.get_event_loop()
 SYSTEM_PATH = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXTERNAL_LIBRARY_PATH = os.path.join(SYSTEM_PATH, "ExternalLibrary")
@@ -279,21 +277,16 @@ def LinkStart():
             # noinspection PyUnresolvedReferences
             import qasync
             MainEventLoop = qasync.QEventLoop(QApplication.instance())
-            asyncio.set_event_loop(MainEventLoop)
-            # noinspection PyUnresolvedReferences
             QApplication.instance().aboutToQuit.connect(LinkStop)
             _QtMode = True
-            print(GREEN_BOLD + f"TheSeedCore connection completed. System standing by..." + RESET)
-            MainEventLoop.run_forever()
-        else:
-            print(GREEN_BOLD + f"TheSeedCore connection completed. System standing by..." + RESET)
-            MainEventLoop.run_forever()
+        print(GREEN_BOLD + f"TheSeedCore connection completed. System standing by..." + RESET)
+        MainEventLoop.run_forever()
     except (KeyboardInterrupt, SystemExit):
         pass
 
 
 def LinkStop():
-    global MainEventLoop, _QtMode
+    global _QtMode
     if SQLiteDatabaseManager.INSTANCE is not None:
         SQLiteDatabaseManager.INSTANCE.closeAllDatabase()
     if MySQLDatabaseManager.INSTANCE is not None:
