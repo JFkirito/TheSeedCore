@@ -1,8 +1,14 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import asyncio
 import time
+from typing import TYPE_CHECKING
 
-from TheSeedCore import *
+import TheSeedCore as TSC
 
+if TYPE_CHECKING:
+    pass
 task_total_count = 0
 execution_count = 10
 
@@ -12,7 +18,7 @@ async def shutdown_system():
         await asyncio.sleep(1)
         print("System shutdown countdown:", 10 - i)
     print("System shutdown")
-    LinkStop()
+    TSC.LinkStop()
 
 
 async def example_function(start_time: float):
@@ -46,11 +52,11 @@ async def main_function():
     start_time = time.time()
     print("Start example function")
     for i in range(execution_count):
-        ConcurrentSystem.submitThreadTask(example_function, callback=example_function_callback, start_time=start_time)
+        TSC.submitThreadTask(example_function, callback=example_function_callback, start_time=start_time)
 
 
 if __name__ == "__main__":
-    ConnectNERvGear()
-    MainEventLoop.create_task(main_function())
-    MainEventLoop.create_task(countdown())
-    LinkStart()
+    TSC.ConnectTheSeedCore(check_env=False, MainPriority=TSC.Priority.HIGH, CoreProcessCount=4, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink, PerformanceReport=True)
+    TSC.MainEventLoop().create_task(main_function())
+    TSC.MainEventLoop().create_task(countdown())
+    TSC.LinkStart()
