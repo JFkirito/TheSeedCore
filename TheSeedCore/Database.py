@@ -823,6 +823,10 @@ class SQLiteDatabase:
         finally:
             self._disconnect()
 
+    def __del__(self):
+        self._StayConnected = False
+        self._disconnect()
+
 
 try:
     # noinspection PyUnresolvedReferences

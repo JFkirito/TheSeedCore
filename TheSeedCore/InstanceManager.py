@@ -405,3 +405,7 @@ class NetworkInstanceManager:
         """
 
         return cls._WebSocketClientInstances
+
+
+class ViewsInstanceManager:
+    ...

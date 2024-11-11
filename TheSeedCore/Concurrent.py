@@ -83,8 +83,8 @@ if multiprocessing.current_process().name == "MainProcess":
     _FutureResult: Dict[str, Any] = {}
     _ProcessTaskSchedulingEvent: threading.Event = threading.Event()
     _ThreadTaskSchedulingEvent: threading.Event = threading.Event()
-    _ProcessBalanceLock: threading.Lock = threading.Lock()
-    _ThreadBalanceLock: threading.Lock = threading.Lock()
+    _ProcessBalanceEvent: threading.Event = threading.Event()
+    _ThreadBalanceEvent: threading.Event = threading.Event()
 
 
 class Priority(str, Enum):
@@ -1368,23 +1368,23 @@ class _ProcessObject(multiprocessing.Process):
         self._cleanupProcessMemory()
         last_cleanup_time: float = time.time()
         while not self.CloseEvent.is_set():
+            await asyncio.sleep(0.001)
             current_time: float = time.time()
             if current_time - last_cleanup_time >= self.ConfigManager.IdleCleanupThreshold.value:
                 self._cleanupProcessMemory()
                 last_cleanup_time: float = current_time
             try:
                 task_data: Tuple[str, _TaskObject, int] = self._getTaskData()
+                task_priority, task_object, retried = task_data
+                try:
+                    task_object.reinitializedParams()
+                    await self._executeAsyncTask(task_priority, task_object, retried) if task_object.TaskType == "Async" else await self._executeSyncTask(task_priority, task_object, retried)
+                except Exception as e:
+                    _DefaultLogger.error(f"[{self.ProcessName} - {self.pid}] task {task_object.TaskID} failed due to {e}.")
             except queue.Empty:
                 if len(self.PendingTasks) == 0:
                     self.WorkingEvent.clear()
-                await asyncio.sleep(0.001)
                 continue
-            task_priority, task_object, retried = task_data
-            try:
-                task_object.reinitializedParams()
-                await self._executeAsyncTask(task_priority, task_object, retried) if task_object.TaskType == "Async" else await self._executeSyncTask(task_priority, task_object, retried)
-            except Exception as e:
-                _DefaultLogger.error(f"[{self.ProcessName} - {self.pid}] task {task_object.TaskID} failed due to {e}.")
         self._cleanup()
 
     async def _executeAsyncTask(self, task_priority: str, task_object: _TaskObject, retried: int) -> None:
@@ -2137,19 +2137,19 @@ class _ThreadObject(threading.Thread):
         """
 
         while not self.CloseEvent.is_set():
+            await asyncio.sleep(0.001)
             try:
                 task_data: Tuple[str, _TaskObject, int] = self._getTaskData()
+                task_priority, task_object, retried = task_data
+                try:
+                    task_object.reinitializedParams()
+                    await self._executeAsyncTask(task_priority, task_object, retried) if task_object.TaskType == "Async" else await self._executeSyncTask(task_priority, task_object, retried)
+                except Exception as e:
+                    _DefaultLogger.error(f"[{self.ThreadName} - {self.ident}] task {task_object.TaskID} failed due to {e}.")
             except queue.Empty:
                 if len(self.PendingTasks) == 0:
                     self.WorkingEvent.clear()
-                await asyncio.sleep(0.001)
                 continue
-            task_priority, task_object, retried = task_data
-            try:
-                task_object.reinitializedParams()
-                await self._executeAsyncTask(task_priority, task_object, retried) if task_object.TaskType == "Async" else await self._executeSyncTask(task_priority, task_object, retried)
-            except Exception as e:
-                _DefaultLogger.error(f"[{self.ThreadName} - {self.ident}] task {task_object.TaskID} failed due to {e}.")
         await self._cleanup()
 
     async def _executeAsyncTask(self, task_priority: str, task_object: _TaskObject, retried: int) -> None:
@@ -2734,10 +2734,10 @@ class _LoadBalancer(threading.Thread):
         last_cleanup_time = time.time()
         performance_report_time = time.time()
         while not self.CloseEvent.is_set():
+            time.sleep(0.001)
             self._updateProcessLoadStatus()
             self._expandPolicyExecutor()
             self._shrinkagePolicyExecutor()
-            time.sleep(0.001)
             if time.time() - performance_report_time >= 10:
                 self._showPerformanceReport()
                 performance_report_time = time.time()
@@ -2910,80 +2910,96 @@ class _LoadBalancer(threading.Thread):
 
     def _autoExpand(self) -> None:
         """
-        Automatically expands processes or threads based on their current load.
+        Automatically handles the expansion of system processes based on current load.
 
+        This method monitors the current load of core and expansion processes.
+        If the combined load exceeds a certain threshold, it attempts to expand the processes accordingly.
+        It also ensures that the system does not exceed its maximum allowable process capacity.
+
+        :raises: None
         :return: None
         setup:
-            1. If the core process count is not zero:
-                1.1. Calculate the total load of core processes by summing their load statuses.
-                1.2. Calculate the total load of expand processes, defaulting to zero if none exist.
-                1.3. Compute the total process load and the average load per process.
-                1.4. Define the ideal load per process (e.g., 50%).
-                1.5. If the average load per process exceeds the ideal load:
-                    1.5.1. If expansion of processes is allowed and the process balance lock can be acquired:
-                        1.5.1.1. Call the method to expand processes and release the lock.
-                    1.5.2. If expansion is not allowed or cannot be performed, log a warning.
-            2. Calculate the total load of core threads by summing their load statuses.
-            3. Calculate the total load of expand threads, defaulting to zero if none exist.
-            4. Define the ideal load per thread (e.g., 80%).
-            5. If the total thread load exceeds the ideal load:
-                5.1. If expansion of threads is allowed and the thread balance lock can be acquired:
-                    5.1.1. Call the method to expand threads and release the lock.
-                5.2. If expansion is not allowed or cannot be performed, log a warning.
+            1. Retrieve the current load for core processes from the StatusManager.
+            2. Retrieve the current load for expansion processes from the StatusManager (if applicable).
+            3. Calculate the total load by combining core and expansion process loads.
+            4. Compare the total load to a predefined threshold (ideal load per process, set to 90%).
+            5. If the load exceeds the threshold, check if process expansion is allowed.
+                5.1 If expansion is allowed, trigger the process expansion.
+                5.2 If expansion is not allowed, log a warning.
+            6. Ensure that expansion happens only when the system is not already scheduling tasks.
+
+        Note:
+            - `_ProcessTaskSchedulingEvent`, `_ThreadTaskSchedulingEvent`, `_ProcessBalanceEvent`, and `_ThreadBalanceEvent`
+              are global events used for controlling task scheduling and balancing during process expansion.
+            - `ConfigManager.CoreProcessCount` and `StatusManager` are used to monitor and manage the system load and processes.
         """
 
+        global _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
         if self.ConfigManager.CoreProcessCount.value != 0:
             current_core_process_total_load: int = sum([self.StatusManager.getCoreProcessLoadStatus(name)[1] for name, load_status in self.StatusManager.CoreProcessLoadStatusPool.items()])
             if self.StatusManager.ExpandProcessTaskStatusPool:
                 current_expand_process_total_load: int = sum([self.StatusManager.getExpandProcessLoadStatus(name)[1] for name, load_status in self.StatusManager.ExpandProcessLoadStatusPool.items()])
             else:
                 current_expand_process_total_load: int = 0
-            process_total_load = current_core_process_total_load + current_expand_process_total_load
-            process_average_load = process_total_load // self.ConfigManager.CoreProcessCount.value
-            ideal_load_per_process: int = 30
-            if (process_average_load * 1.5) >= ideal_load_per_process:
-                if self._isAllowExpansion("Process") and _ProcessBalanceLock.acquire(timeout=0):
+            process_total_load = max(0, min(100, current_core_process_total_load + current_expand_process_total_load))
+            ideal_load_per_process = 90
+            if process_total_load >= ideal_load_per_process:
+                allow_process_expansion = self._isAllowExpansion("Process")
+                if allow_process_expansion and not _ProcessTaskSchedulingEvent.is_set():
+                    _ProcessBalanceEvent.set()
                     self._expandProcess()
-                    _ProcessBalanceLock.release()
-                else:
+                    _ProcessBalanceEvent.clear()
+                elif not allow_process_expansion:
                     self.Logger.warning(f"Load reaches {int(ideal_load_per_process)}%, but unable to expand more process")
+                else:
+                    pass
+
         current_core_thread_total_load: int = sum([self.StatusManager.getCoreThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreThreadTaskStatusPool.items()])
         if self.StatusManager.ExpandThreadTaskStatusPool:
             current_expand_thread_total_load: int = sum([self.StatusManager.getExpandThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.ExpandThreadTaskStatusPool.items()])
         else:
             current_expand_thread_total_load: int = 0
         thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
-        ideal_load_per_thread: int = 80
-        if thread_total_load > ideal_load_per_thread:
-            if self._isAllowExpansion("Thread") and _ThreadBalanceLock.acquire(timeout=0.):
+        threshold: int = self.ConfigManager.GlobalTaskThreshold.value - (self.ConfigManager.CoreProcessCount.value * self.ConfigManager.TaskThreshold.value)
+        if thread_total_load >= threshold * 0.9:
+            allow_thread_expansion = self._isAllowExpansion("Thread")
+            if allow_thread_expansion and not _ThreadTaskSchedulingEvent.is_set():
+                _ThreadBalanceEvent.set()
                 self._expandThread()
-                _ThreadBalanceLock.release()
+                _ThreadBalanceEvent.clear()
+            elif not allow_thread_expansion:
+                self.Logger.warning(f"Load reaches {int(threshold)}%, but unable to expand more thread")
             else:
-                self.Logger.warning(f"Load reaches {int(ideal_load_per_thread)}%, but unable to expand more thread")
+                pass
 
     def _beforehandExpand(self) -> None:
         """
-        Checks current loads and determines if expansion of processes or threads is necessary.
+        Handles the expansion of system processes and threads based on the total task count.
 
+        This method calculates the total load for both processes and threads, considering core and
+        expansion tasks. If the combined load exceeds a specific threshold (80% of the global task limit),
+        it attempts to expand either processes or threads, depending on the current system state.
+
+        :raises: None
         :return: None
         setup:
-            1. If the core process count is not zero:
-                1.1. Calculate the total load of core processes by summing their task loads.
-                1.2. Calculate the total load of expand processes, defaulting to zero if none exist.
-                1.3. Compute the total task count for processes as the sum of core and expand process loads.
-            2. If the core process count is zero, set the total task count to zero.
-            3. Calculate the total load of core threads by summing their task loads.
-            4. Calculate the total load of expand threads, defaulting to zero if none exist.
-            5. Compute the total thread load as the sum of core and expand thread loads.
-            6. If the combined total task count of processes and threads exceeds 80% of the global task threshold:
-                6.1. If expansion of processes is allowed and the process balance lock can be acquired:
-                    6.1.1. Call the method to expand processes and release the lock.
-                6.2. If expansion of processes is not allowed or cannot be performed, log a warning.
-                6.3. If expansion of threads is allowed and the thread balance lock can be acquired:
-                    6.3.1. Call the method to expand threads and release the lock.
-                6.4. If expansion of threads is not allowed or cannot be performed, log a warning.
+            1. Retrieve the current load for core processes and expansion processes.
+            2. Calculate the total task count by combining core and expansion process loads.
+            3. Retrieve the current load for core threads and expansion threads.
+            4. Calculate the total thread load by combining core and expansion thread loads.
+            5. If the total task and thread load exceeds 80% of the global task threshold:
+                5.1. Check if process expansion is allowed, and if no process task scheduling is in progress, expand processes.
+                5.2. Check if thread expansion is allowed, and if thread task scheduling is in progress, expand threads.
+            6. Log warnings if expansion is not possible.
+
+        Note:
+            - `_ProcessTaskSchedulingEvent` and `_ThreadTaskSchedulingEvent` are global events that control task scheduling for processes and threads.
+            - `_ProcessBalanceEvent` and `_ThreadBalanceEvent` are global events used for controlling process and thread balancing during expansion.
+            - `ConfigManager.GlobalTaskThreshold` is used to define the task threshold for expansion.
+            - `StatusManager` is used to track the current load status of processes and threads.
         """
 
+        global _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
         if self.ConfigManager.CoreProcessCount.value != 0:
             current_core_process_total_load: int = sum([self.StatusManager.getCoreProcessTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreProcessTaskStatusPool.items()])
             if self.StatusManager.ExpandProcessTaskStatusPool:
@@ -3000,14 +3016,16 @@ class _LoadBalancer(threading.Thread):
             current_expand_thread_total_load: int = 0
         thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
         if (process_total_task_count + thread_total_load) >= self.ConfigManager.GlobalTaskThreshold.value * 0.8:
-            if self._isAllowExpansion("Process") and _ProcessBalanceLock.acquire(timeout=0):
+            if self._isAllowExpansion("Process") and not _ProcessTaskSchedulingEvent.is_set():
+                _ProcessBalanceEvent.set()
                 self._expandProcess()
-                _ProcessBalanceLock.release()
+                _ProcessBalanceEvent.clear()
             else:
                 self.Logger.warning(f"Task count reaches {self.ConfigManager.GlobalTaskThreshold.value}, but unable to expand more process")
-            if self._isAllowExpansion("Thread") and _ThreadBalanceLock.acquire(timeout=0):
+            if self._isAllowExpansion("Thread") and _ThreadTaskSchedulingEvent.is_set():
+                _ThreadBalanceEvent.set()
                 self._expandThread()
-                _ThreadBalanceLock.release()
+                _ThreadBalanceEvent.clear()
             else:
                 self.Logger.warning(f"Task count reaches {self.ConfigManager.GlobalTaskThreshold.value}, but unable to expand more thread")
 
@@ -3031,7 +3049,7 @@ class _LoadBalancer(threading.Thread):
                 return False
             return True
         if expand_type == "Thread":
-            if (len(self.StatusManager.CoreThreadTaskStatusPool) + len(self.StatusManager.ExpandThreadTaskStatusPool)) >= self.ConfigManager.MaximumThreadCount.value:
+            if (len(_CoreThreadPool) + len(_ExpandThreadPool)) >= self.ConfigManager.MaximumThreadCount.value:
                 return False
             return True
 
@@ -3083,6 +3101,7 @@ class _LoadBalancer(threading.Thread):
             thread_name: str = self._generateExpandID("Thread")
             thread_object = _ThreadObject(thread_name, "Expand", self.StatusManager, self.ConfigManager, self.SystemExecutor)
             thread_object.start()
+            _ExpandThreadPool[thread_name] = thread_object
             self.StatusManager.updateExpandThreadTaskStatus(thread_name, thread_object.ident, 0)
             _ExpandThreadSurvivalTime[thread_name] = time.time()
         except Exception as e:
@@ -3139,93 +3158,107 @@ class _LoadBalancer(threading.Thread):
 
     def _autoShrink(self) -> None:
         """
-        Automatically shrinks the expand process and thread pools by closing idle instances.
+        Handles the automatic shrinkage of processes and threads based on their inactivity.
 
+        This method evaluates whether processes and threads in the system can be closed due to inactivity.
+        It checks if the time since the last activity exceeds the configured shrinkage timeout. If the processes or
+        threads are idle, they are stopped and removed from the system.
+
+        :raises: None
         :return: None
         setup:
-            1. Check if the core process count is not zero and that the process task scheduling event is not set.
-            2. Collect all expand processes and filter those that are idle and have exceeded the survival time limit.
-            3. If there are eligible processes to close and the process balance lock can be acquired:
-                3.1. Stop each eligible process and remove it from the pool and associated status tracking.
-                3.2. Log a debug message indicating the process has been closed due to idle status.
-            4. Check if the thread task scheduling event is set; if so, exit the function early.
-            5. Collect all expand threads and filter those that are idle and have exceeded the survival time limit.
-            6. If there are eligible threads to close and the thread balance lock can be acquired:
-                6.1. Stop each eligible thread and remove it from the pool and associated status tracking.
-                6.2. Log a debug message indicating the thread has been closed due to idle status.
+            1. Retrieve the list of all expansion processes and threads from the pool.
+            2. For processes, check if they have been inactive for a time period exceeding the configured shrinkage timeout.
+            3. For threads, perform similar checks for inactivity.
+            4. If any process or thread is found to be inactive, stop it and remove it from the respective pool and status tracking.
+            5. Ensure that process and thread balancing events are properly set and cleared.
+
+        Note:
+            - `_ExpandProcessPool` and `_ExpandThreadPool` hold the active expansion processes and threads.
+            - `_ExpandProcessSurvivalTime` and `_ExpandThreadSurvivalTime` track the time since each process/thread was last active.
+            - `_ProcessTaskSchedulingEvent` and `_ThreadTaskSchedulingEvent` are used to ensure that task scheduling is not occurring during shrinkage.
+            - `_ProcessBalanceEvent` and `_ThreadBalanceEvent` control the balance of processes and threads during shrinking.
+            - The `ShrinkagePolicyTimeout` in the `ConfigManager` defines the inactivity period after which processes and threads can be shrunk.
         """
 
-        global _ExpandProcessPool, _ExpandThreadPool, _ExpandProcessSurvivalTime, _ExpandThreadSurvivalTime, _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceLock, _ThreadBalanceLock
+        global _ExpandProcessPool, _ExpandThreadPool, _ExpandProcessSurvivalTime, _ExpandThreadSurvivalTime, _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
         if self.ConfigManager.CoreProcessCount.value != 0 and not _ProcessTaskSchedulingEvent.is_set():
+            _ProcessBalanceEvent.set()
             expand_process_obj: List[_ProcessObject] = [obj for i, obj in _ExpandProcessPool.items()]
             allow_close_processes: List[_ProcessObject] = [
                 obj for obj in expand_process_obj
                 if not obj.WorkingEvent.is_set() and (time.time() - _ExpandProcessSurvivalTime[obj.ProcessName]) >= self.ConfigManager.ShrinkagePolicyTimeout.value
             ]
-            if allow_close_processes and _ProcessBalanceLock.acquire(timeout=0):
-                for obj in allow_close_processes:
-                    obj.stop()
-                    del _ExpandProcessPool[obj.ProcessName]
-                    del self.StatusManager.ExpandProcessTaskStatusPool[obj.ProcessName]
-                    del self.StatusManager.ExpandProcessLoadStatusPool[obj.ProcessName]
-                    del _ExpandProcessSurvivalTime[obj.ProcessName]
-                    self.Logger.debug(f"[{obj.ProcessName} - {obj.pid}] has been closed due to idle status.")
-                _ProcessBalanceLock.release()
+            for obj in allow_close_processes:
+                obj.stop()
+                del _ExpandProcessPool[obj.ProcessName]
+                del self.StatusManager.ExpandProcessTaskStatusPool[obj.ProcessName]
+                del self.StatusManager.ExpandProcessLoadStatusPool[obj.ProcessName]
+                del _ExpandProcessSurvivalTime[obj.ProcessName]
+                self.Logger.debug(f"[{obj.ProcessName} - {obj.pid}] has been closed due to idle status.")
+            _ProcessBalanceEvent.clear()
 
-        if _ThreadTaskSchedulingEvent.is_set():
-            return
-        expand_thread_obj: List[_ThreadObject] = [obj for i, obj in _ExpandThreadPool.items()]
-        allow_close_threads: List[_ThreadObject] = [
-            obj for obj in expand_thread_obj
-            if not obj.WorkingEvent.is_set() and (time.time() - _ExpandThreadSurvivalTime[obj.ThreadName]) >= self.ConfigManager.ShrinkagePolicyTimeout.value
-        ]
-        if allow_close_threads and _ThreadBalanceLock.acquire(timeout=0):
+        if not _ThreadTaskSchedulingEvent.is_set():
+            _ThreadBalanceEvent.set()
+            expand_thread_obj: List[_ThreadObject] = [obj for i, obj in _ExpandThreadPool.items()]
+            allow_close_threads: List[_ThreadObject] = [
+                obj for obj in expand_thread_obj
+                if not obj.WorkingEvent.is_set() and (time.time() - _ExpandThreadSurvivalTime[obj.ThreadName]) >= self.ConfigManager.ShrinkagePolicyTimeout.value
+            ]
             for obj in allow_close_threads:
                 obj.stop()
                 del _ExpandThreadPool[obj.ThreadName]
                 del self.StatusManager.ExpandThreadTaskStatusPool[obj.ThreadName]
                 del _ExpandThreadSurvivalTime[obj.ThreadName]
                 self.Logger.debug(f"[{obj.ThreadName} - {obj.ident}] has been closed due to idle status.")
-            _ThreadBalanceLock.release()
+            _ThreadBalanceEvent.clear()
 
     def _timeoutShrink(self) -> None:
         """
-        Checks for and shrinks the expand process and thread pools by closing timed-out instances.
+        Handles the shrinkage of processes and threads based on timeout inactivity.
 
+        This method checks for processes and threads that have been idle for a time period exceeding the configured
+        shrinkage policy timeout. If they are idle for too long, they are stopped and removed from the system.
+
+        :raises: None
         :return: None
         setup:
-            1. Check if the core process count is not zero before proceeding.
-            2. Identify expand processes that have exceeded the survival time limit defined in the configuration.
-            3. If there are timed-out expand processes and the process balance lock can be acquired:
-                3.1. Stop each identified expand process and remove it from the pool and associated status tracking.
-                2. Log a debug message indicating the process has been closed due to timeout.
-            4. Identify expand threads that have exceeded the survival time limit defined in the configuration.
-            5. If there are timed-out expand threads and the thread balance lock can be acquired:
-                5.1. Stop each identified expand thread and remove it from the pool and associated status tracking.
-                5.2. Log a debug message indicating the thread has been closed due to timeout.
+            1. Check if process task scheduling is not in progress and balance the process pool.
+            2. For processes, evaluate whether their survival time exceeds the configured shrinkage timeout.
+            3. Similarly, evaluate thread survival time to determine if they should be shrunk.
+            4. Stop any processes or threads that exceed the timeout and remove them from the respective pools and status tracking.
+            5. Ensure that process and thread balancing events are set and cleared properly.
+
+        Note:
+            - `_ExpandProcessPool` and `_ExpandThreadPool` hold the active expansion processes and threads.
+            - `_ExpandProcessSurvivalTime` and `_ExpandThreadSurvivalTime` track the time since each process/thread was last active.
+            - `_ProcessTaskSchedulingEvent` and `_ThreadTaskSchedulingEvent` are used to ensure that task scheduling is not occurring during shrinkage.
+            - `_ProcessBalanceEvent` and `_ThreadBalanceEvent` control the balance of processes and threads during shrinking.
+            - The `ShrinkagePolicyTimeout` in the `ConfigManager` defines the inactivity period after which processes and threads can be shrunk.
         """
 
-        global _ExpandProcessPool, _ExpandThreadPool, _ExpandProcessSurvivalTime, _ExpandThreadSurvivalTime
-        if self.ConfigManager.CoreProcessCount.value != 0:
+        global _ExpandProcessPool, _ExpandThreadPool, _ExpandProcessSurvivalTime, _ExpandThreadSurvivalTime, _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
+        if self.ConfigManager.CoreProcessCount.value != 0 and not _ProcessTaskSchedulingEvent.is_set():
+            _ProcessBalanceEvent.set()
             expand_process_obj: List[str] = [obj for obj, survival_time in _ExpandProcessSurvivalTime.items() if (time.time() - survival_time) >= self.ConfigManager.ShrinkagePolicyTimeout.value]
-            if expand_process_obj and _ProcessBalanceLock.acquire(timeout=0):
-                for obj in expand_process_obj:
-                    _ExpandProcessPool[obj].stop()
-                    del _ExpandProcessPool[obj]
-                    del self.StatusManager.ExpandProcessTaskStatusPool[obj]
-                    del _ExpandProcessSurvivalTime[obj]
-                    self.Logger.debug(f"{obj} has been closed due to timeout.")
-                _ProcessBalanceLock.release()
+            for obj in expand_process_obj:
+                _ExpandProcessPool[obj].stop()
+                del _ExpandProcessPool[obj]
+                del self.StatusManager.ExpandProcessTaskStatusPool[obj]
+                del _ExpandProcessSurvivalTime[obj]
+                self.Logger.debug(f"{obj} has been closed due to timeout.")
+            _ProcessBalanceEvent.clear()
 
-        expand_thread_obj: List[str] = [obj for obj, survival_time in _ExpandThreadSurvivalTime.items() if (time.time() - survival_time) >= self.ConfigManager.ShrinkagePolicyTimeout.value]
-        if expand_thread_obj and _ThreadBalanceLock.acquire(timeout=0):
+        if not _ThreadTaskSchedulingEvent.is_set():
+            _ThreadBalanceEvent.set()
+            expand_thread_obj: List[str] = [obj for obj, survival_time in _ExpandThreadSurvivalTime.items() if (time.time() - survival_time) >= self.ConfigManager.ShrinkagePolicyTimeout.value]
             for obj in expand_thread_obj:
                 _ExpandThreadPool[obj].stop()
                 del _ExpandThreadPool[obj]
                 del self.StatusManager.ExpandThreadTaskStatusPool[obj]
                 del _ExpandThreadSurvivalTime[obj]
                 self.Logger.debug(f"{obj} has been closed due to timeout.")
-            _ThreadBalanceLock.release()
+            _ThreadBalanceEvent.clear()
 
 
 class _ProcessTaskScheduler(threading.Thread):
@@ -3264,36 +3297,43 @@ class _ProcessTaskScheduler(threading.Thread):
 
     def run(self) -> None:
         """
-        Runs the process task scheduler, continuously processing tasks until the close event is set.
+        Main event loop for processing tasks in the system.
 
+        This method continuously runs and processes tasks from the `ProcessTaskStorageQueue`. It checks for tasks
+        that need to be scheduled based on the priority and manages task scheduling in a controlled manner by using events
+        to prevent conflicts. If there are no tasks to process, the loop waits until new tasks are available.
+
+        :raises: None
         :return: None
         setup:
-            1. Enter a loop that continues until the CloseEvent is triggered.
-            2. Attempt to retrieve task data from the ProcessTaskStorageQueue without blocking.
-            3. If a task is retrieved, set the process task scheduling event.
-            4. If the queue is empty, pause briefly to reduce CPU usage and clear the event before continuing.
-            5. If a task is successfully retrieved, attempt to acquire a lock for process balancing.
-            6. If the lock is acquired, schedule the task using the scheduler method and release the lock.
-            7. If the lock cannot be acquired, place the task back into the queue for later processing.
-            8. Log a message indicating that the process task scheduler has been closed when exiting the loop.
+            1. Continuously checks if the `CloseEvent` is set to determine if the loop should terminate.
+            2. If no tasks are present, the loop waits briefly and tries again.
+            3. Uses the `_ProcessBalanceEvent` to prevent task scheduling during balancing.
+            4. Retrieves task data from the `ProcessTaskStorageQueue` and schedules the task using the `_scheduler`.
+            5. Clears the `_ProcessTaskSchedulingEvent` flag after the task is scheduled, allowing the next task to be processed.
+            6. Logs a message when the task scheduler is closed.
+
+        Note:
+            - The `ProcessTaskStorageQueue` holds the tasks to be processed.
+            - The `_scheduler` method is used to assign tasks for execution.
+            - The `_ProcessTaskSchedulingEvent` controls the task scheduling process to avoid concurrent scheduling conflicts.
+            - The `_ProcessBalanceEvent` is used to block task scheduling when process balancing is in progress.
         """
 
         while not self.CloseEvent.is_set():
-            global _ProcessTaskSchedulingEvent
+            global _ProcessTaskSchedulingEvent, _ProcessBalanceEvent
+            time.sleep(0.001)
             try:
-                task_data: Tuple[int, _TaskObject] = self.ProcessTaskStorageQueue.get_nowait()
+                if _ProcessBalanceEvent.is_set():
+                    continue
                 _ProcessTaskSchedulingEvent.set()
+                task_data: Tuple[int, _TaskObject] = self.ProcessTaskStorageQueue.get_nowait()
+                priority, task_object = task_data
+                self._scheduler(priority, task_object)
+                _ProcessTaskSchedulingEvent.clear()
             except queue.Empty:
-                time.sleep(0.001)
                 _ProcessTaskSchedulingEvent.clear()
                 continue
-            priority, task_object = task_data
-            acquire: bool = _ProcessBalanceLock.acquire(timeout=0)
-            if acquire:
-                self._scheduler(priority, task_object)
-                _ProcessBalanceLock.release()
-            else:
-                self.ProcessTaskStorageQueue.put_nowait((priority, task_object))
         self.Logger.info(f"[ProcessTaskScheduler] has been closed.")
 
     def stop(self) -> None:
@@ -3459,36 +3499,43 @@ class _ThreadTaskScheduler(threading.Thread):
 
     def run(self) -> None:
         """
-        Runs the thread task scheduler, continuously processing tasks until the close event is set.
+        Main event loop for processing thread tasks in the system.
 
+        This method continuously runs and processes thread tasks from the `ThreadTaskStorageQueue`. It ensures that
+        tasks are scheduled in an orderly manner by using events to manage the task scheduling and prevent conflicts.
+        If no tasks are available, the loop waits briefly before checking again.
+
+        :raises: None
         :return: None
         setup:
-            1. Enter a loop that continues until the CloseEvent is triggered.
-            2. Attempt to retrieve task data from the ThreadTaskStorageQueue without blocking.
-            3. If a task is retrieved, set the thread task scheduling event.
-            4. If the queue is empty, pause briefly to reduce CPU usage and clear the event before continuing.
-            5. If a task is successfully retrieved, attempt to acquire a lock for thread balancing.
-            6. If the lock is acquired, schedule the task using the scheduler method and release the lock.
-            7. If the lock cannot be acquired, place the task back into the queue for later processing.
-            8. Log a message indicating that the thread task scheduler has been closed when exiting the loop.
+            1. Continuously checks if the `CloseEvent` is set to determine if the loop should terminate.
+            2. If no tasks are present, the loop waits briefly and retries.
+            3. Uses the `_ThreadBalanceEvent` to prevent task scheduling during thread balancing.
+            4. Retrieves task data from the `ThreadTaskStorageQueue` and schedules the task using the `_scheduler`.
+            5. Clears the `_ThreadTaskSchedulingEvent` flag after scheduling a task, allowing the next task to be processed.
+            6. Logs a message when the thread task scheduler is closed.
+
+        Note:
+            - The `ThreadTaskStorageQueue` holds the thread tasks to be processed.
+            - The `_scheduler` method is used to assign tasks for execution.
+            - The `_ThreadTaskSchedulingEvent` controls the task scheduling to avoid concurrent scheduling conflicts.
+            - The `_ThreadBalanceEvent` is used to block task scheduling when thread balancing is in progress.
         """
 
         while not self.CloseEvent.is_set():
-            global _ThreadTaskSchedulingEvent
+            global _ThreadTaskSchedulingEvent, _ThreadBalanceEvent
+            time.sleep(0.001)
             try:
-                task_data: Tuple[int, _TaskObject] = self.ThreadTaskStorageQueue.get_nowait()
+                if _ThreadBalanceEvent.is_set():
+                    continue
                 _ThreadTaskSchedulingEvent.set()
+                task_data: Tuple[int, _TaskObject] = self.ThreadTaskStorageQueue.get_nowait()
+                priority, task_object = task_data
+                self._scheduler(priority, task_object)
+                _ThreadTaskSchedulingEvent.clear()
             except queue.Empty:
-                time.sleep(0.001)
                 _ThreadTaskSchedulingEvent.clear()
                 continue
-            priority, task_object = task_data
-            acquire: bool = _ThreadBalanceLock.acquire(timeout=0)
-            if acquire:
-                self._scheduler(priority, task_object)
-                _ThreadBalanceLock.release()
-            else:
-                self.ThreadTaskStorageQueue.put_nowait((priority, task_object))
         self.Logger.info(f"[ThreadTaskScheduler] has been closed.")
 
     def stop(self) -> None:

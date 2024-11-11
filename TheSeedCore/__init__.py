@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack
 if TYPE_CHECKING:
     pass
 
-__version__: str = "0.1.1"
+__version__: str = "0.1.2"
 __author__: str = "B站疾风Kirito"
 __website__: str = "https://space.bilibili.com/6440741"
 __repository__: str = "https://github.com/JFkirito/TheSeedCore"
@@ -267,7 +267,7 @@ def _createMainEventLoop(**config: Unpack[_TheSeedCoreConfig]) -> asyncio.Abstra
 
     global _QtMode
     if _PySide6Support and _checkQtApplicationInstance():
-        if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0") < 0:
+        if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0") >= 0:
             from PySide6.QtAsyncio import QAsyncioEventLoopPolicy
             default_event_loop_policy = asyncio.get_event_loop_policy()
             asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("quit_qapp", True), handle_sigint=config.get("handle_sigint", False)))
@@ -387,32 +387,6 @@ def _showBanner(service_process_id: int):
     print(TextColor.PURPLE_BOLD.value + f"Latest repositories address {__repository__}" + TextColor.RESET.value)
 
 
-def _cleanupDatabase():
-    """
-    Cleans up the databases by deleting all active SQLite and MySQL database instances.
-
-    This function retrieves all instances of SQLite and MySQL databases managed
-    by the DatabaseInstanceManager. It iterates through each instance and calls
-    the `deleteDatabase` method to remove them from storage.
-
-    :return: None
-    :raise: This function does not raise exceptions, but will log errors
-            if any occur during the deletion process of the databases.
-    setup:
-        1. Retrieve all SQLite database instances.
-        2. Retrieve all MySQL database instances.
-        3. Call the deleteDatabase method for each SQLite database instance.
-        4. Call the deleteDatabase method for each MySQL database instance.
-    """
-
-    all_sqlite_database = DatabaseInstanceManager.getAllSQLiteDatabaseInstances()
-    all_mysql_database = DatabaseInstanceManager.getAllMySQLDatabaseInstances()
-    for sqlite_database_instance in all_sqlite_database.values():
-        sqlite_database_instance.deleteDatabase()
-    for mysql_database_instance in all_mysql_database.values():
-        mysql_database_instance.deleteDatabase()
-
-
 def _cleanupNetworkService():
     """
     Cleans up the network services by stopping all active HTTP and WebSocket servers.
@@ -528,12 +502,10 @@ def LinkStop():
     :raise: Raises exceptions if any cleanup operation fails.
 
     setup:
-        1. Call `_cleanupDatabase` to release database resources.
-        2. Call `_cleanupNetworkService` to stop any network services.
-        3. Invoke `closeConcurrentSystem` to close any concurrent operations or threads.
+        1. Call `_cleanupNetworkService` to stop any network services.
+        2. Invoke `closeConcurrentSystem` to close any concurrent operations or threads.
     """
 
-    _cleanupDatabase()
     _cleanupNetworkService()
     closeConcurrentSystem()
     if not _QtMode:
