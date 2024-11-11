@@ -70,13 +70,13 @@ class TestWidget(QWidget):
     @asyncSlot()
     async def _start_process_test(self):
         start_time = time.time()
-        for i in range(1000):
+        for i in range(100):
             TSC.submitProcessTask(self.process_test_function, callback=self.process_test_callback, start_time=start_time)
 
     @asyncSlot()
     async def _start_thread_test(self):
         start_time = time.time()
-        for i in range(1000):
+        for i in range(100):
             TSC.submitThreadTask(self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
 
     @staticmethod
@@ -135,7 +135,7 @@ class TestWidget(QWidget):
 
 if __name__ == "__main__":
     qt = QApplication(sys.argv)
-    TSC.ConnectTheSeedCore(check_env=False, MainPriority=TSC.Priority.HIGH, CoreProcessCount=4, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink, PerformanceReport=True)
+    TSC.ConnectTheSeedCore(check_env=True, MainPriority=TSC.Priority.HIGH, CoreProcessCount=4, CoreThreadCount=4, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink)
     w = TestWidget()
     w.show()
     TSC.LinkStart()

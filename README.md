@@ -12,23 +12,15 @@ TheSeedCore 是一个综合性的模块化框架，旨在满足现代应用开�
 
 ### 多功能数据库集成
 
-- TheSeedCore 提供与多种数据库（包括 SQLite、MySQL 和 Redis）的无缝集成。通过统一的数据库操作接口，开发者可以轻松切换不同数据库，而无需修改代码。
+- TheSeedCore 提供与多种数据库（包括 SQLite、MySQL）的无缝集成。通过统一的数据库操作接口，开发者可以轻松切换不同数据库，而无需修改代码。
 
 ### PyQt/PySide 支持
 
 - 集成对 Qt 的支持，特别是在回调执行和界面操作方面。通过 PyQt/PySide 事件循环管理回调和异步任务，确保图形界面应用的流畅性和响应性。
 
-### Kafka 支持
-
-- TheSeedCore 的 Kafka 服务模块提供了管理 Apache Kafka 集群的全面支持。包括集群配置、生产者和消费者管理以及主题处理，适用于分布式消息系统。
-
 ### 高级加密功能
 
 - TheSeedCore 提供先进的数据加密和解密功能，支持AES和RSA加密，提供密钥的生成、管理和使用功能。配备密钥管理和安全数据处理，确保您的数据始终受到保护。
-
-### 外部服务管理
-
-- 框架包含一个外部服务模块，支持 Node.js 包的安装和管理。这使得集成外部服务和扩展应用功能变得简单。
 
 ### 先进的网络服务
 
@@ -96,23 +88,21 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 ├── init.py
 
-├── ConcurrentSystemModule.py
+├── Concurrent.py
 
-├── DatabaseModule.py
+├── Database.py
 
-├── EncryptionModule.py
-
-├── ExternalServicesModule.py
-
-├── KafkaServiceModule.py
+├── InstanceManager.py
 
 ├── LoggerModule.py
 
-└── NetworkModule.py
+├── Network.py
+
+└── Security.py
 
 ## 环境要求
 
-- 系统环境：Windows
+- 系统环境：Windows, Linux, macOS
 
 
 - Python 3.11 或更高版本
@@ -121,267 +111,273 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 ### 模块依赖
 
-1. TheSeedCore除了并发系统模块 `ConcurrentSystemModule` 和日志模块 `LoggerModule` 外，其他模块都需要一定的依赖库支持。
+1. `ConnectTheSeedCore` 方法在启动时会检查各个模块的依赖，如果某个模块缺少依赖，TheSeedCore会提示应该安装哪些依赖库以支持该模块的使用。
 
-2. `ConnectNERvGear` 方法在启动时会检查各个模块的依赖，如果某个模块缺少依赖，TheSeedCore会提示应该安装哪些依赖库以支持该模块的使用。
+2. 如果在缺少依赖的情况下仍然使用该模块的功能，将会抛出 `ModuleNotFoundError` 异常。
 
-3. 如果在缺少依赖的情况下仍然导入该模块的类，系统将会抛出 `ModuleNotFoundError` 异常。
+3. 如果不希望看到依赖检查信息，可以在调用 `ConnectTheSeedCore` 时传递 `check_env=False`，依赖检查信息将不会显示在控制台中。
 
-4. 如果不希望看到依赖检查信息，可以在调用 `ConnectNERvGear` 时传递`check_env_support=False`，依赖检查信息将不会打印到控制台。
-
-```
-from TheSeedCore import *
+```python
+import TheSeedCore as TSC
 
 if __name__ == "__main__":
-    # 传递check_env_support=False将不会显示依赖检查信息
-    ConnectNERvGear(check_env_support=False)
-    LinkStart()
+    # 传递check_env=False将不会显示依赖检查信息
+    TSC.ConnectTheSeedCore(check_env=False)
+    TSC.LinkStart()
 ```
 
 ### 启动和关闭
 
-1. **_启动_**
-    1. 在程序入口处必须先调用 `ConnectNERvGear` 方法来初始化TheSeedCore，该方法会检查相关组件和依赖的完整性以及启动一些必要的服务。
-        - **该方法接受三个参数：`concurrent_config`， `check_env_support`， `debug_mode`。**
-        - **`concurrent_config`**：并发系统配置，类型为 `ConcurrentSystemConfig`，默认为None。
-        - **`check_env_support`**：是否检查环境支持，类型为 `bool`，默认为True。
-        - **`debug_mode`**：调试模式，类型为 `bool`，默认为False。
-    2. 实例您的应用程序，如果是QT模式，请确保 `ConnectNERvGear` 的调用在实例化 `QApplication` 之前，并且实例 `QApplication` 后调用 `linkStart` 方法。
-    3. 在调用 `ConnectNERvGear` 方法后，您可以调用 `LinkStart` 方法来启动TheSeedCore，该方法会创建或启动一个事件循环执行您的应用程序。
+1. 在程序入口处必须先调用 `ConnectTheSeedCore` 方法来初始化TheSeedCore，该方法会检查相关组件和依赖的完整性以及启动一些必要的服务。该方法接受以下参数：
+    - **`check_env`**：是否检查环境依赖，默认为`True`。
+    - **`quit_qapp`**：异步事件循环退出时是否退出Qt应用程序，PySide6版本小于6.7.0时该值不生效，默认为`True`。
+    - **`handle_sigint`**：是否处理SIGINT信号，PySide6版本小于6.7.0时该值不生效，默认为`False`。
+    - **`MainPriority`**：主进程优先级，可选，默认为`Priority.NORMAL`。
+    - **`CoreProcessCount`**：核心进程数，框架会自动检测最大值，为`None`时进程池将不可用，默认为`None`。
+    - **`CoreThreadCount`**：核心线程数，框架会自动检测最大值，为`None`时自动设置，默认为`None`。
+    - **`MaximumProcessCount`**：最大进程数，框架会自动检测最大值，为`None`时自动设置，默认为`None`。
+    - **`MaximumThreadCount`**：最大线程数，框架会自动检测最大值，为`None`时自动设置，默认为`None`。
+    - **`IdleCleanupThreshold`**：进程内存空闲清理阈值，为`None`时自动设置，默认为`None`。
+    - **`TaskThreshold`**：每个进程和线程的任务数量阈值，为`None`时自动设置，默认为`None`。
+    - **`GlobalTaskThreshold`**：全局任务队列阈值，为`None`时自动设置，默认为`None`。
+    - **`ExpandPolicy`**：扩展策略，默认为`ExpandPolicy.AutoExpand`。
+    - **`ShrinkagePolicy`**：收缩策略，默认为`ShrinkagePolicy.AutoShrink`。
+    - **`ShrinkagePolicyTimeout`**：收缩策略超时时间，默认为`15`。
+    - **`PerformanceReport`**：性能报告，为`True`时启用，默认为`True`。
+2. 如果要兼容PyQt或PySide，请确保 `ConnectTheSeedCore` 的调用在实例化 `QApplication` 之后，并且实例您的应用程序后调用 `LinkStart` 方法启动TheSeedCore。
+3. `ConnectTheSeedCore`会自动创建主事件循环，您可以调用 `MainEventLoop()` 来获取主事件循环并进行操作。
+4. 退出应用时请调用 `LinkStop` 方法，该方法会清理所有由TheSeedCore创建的所有资源后关闭主事件循环并退出应用程序。
 
-2. **_主事件循环_**
-    1. TheSeedCore会自动获取当前异步事件循环来作为回调执行的主事件循环。
-    2. 如果导入TheSeedCore之前没有创建事件循环，TheSeedCore会立即创建一个并存储在 `MainEventLoop` 中，非Qt模式下后续您可以调用 `MainEventLoop` 来获取主事件循环。
-
-3. **_关闭_**
-    1. 退出应用时请调用 `LinkStop` 方法，该方法会清理所有由TheSeedCore创建的所有资源后关闭主事件循环并退出应用程序。
-
-```
+```python
 import asyncio
-from TheSeedCore import *
+import time
 
-class MyApplication:
-    def __init__(self, some_value):
-        self.value = some_value
-        self._initApplication()
-        
-    def _initApplication(self):
-        # 在这里用主事件循环创建一个异步任务
-        MainEventLoop.create_task(self.printValue())
-        
-    async def printValue(self):
+import TheSeedCore as TSC
+
+task_total_count = 0
+execution_count = 10
+
+
+async def shutdown_system():
+    for i in range(10):
         await asyncio.sleep(1)
-        print(self.value)
-        # 在这里调用linkStop关闭应用
-        linkStop()
-    
+        print("System shutdown countdown:", 10 - i)
+    print("System shutdown")
+    TSC.LinkStop()
+
+
+async def example_function(start_time: float):
+    current_time = time.time()
+    await asyncio.sleep(2)
+    execution_time = time.time() - current_time
+    return start_time, current_time - start_time, execution_time
+
+
+async def example_function_callback(result: tuple[float, float, float]):
+    callback_time = time.time() - result[0]
+    arrival_time = result[1]
+    execution_time = result[2]
+    global task_total_count, execution_count
+    task_total_count += 1
+    print(f"Task{task_total_count}. Callback time: {callback_time:.3f}, Arrival time: {arrival_time:.3f}, Execution time: {execution_time:.3f}")
+    if task_total_count == execution_count:
+        print("All example functions have been completed.")
+        await shutdown_system()
+
+
+async def countdown():
+    for i in range(2):
+        await asyncio.sleep(1)
+        print(f"The example will complete in {2 - i} seconds.")
+    print("Example completed")
+
+
+async def main_function():
+    global execution_count
+    start_time = time.time()
+    print("Start example function")
+    for i in range(execution_count):
+        TSC.submitThreadTask(example_function, callback=example_function_callback, start_time=start_time)
+
+
 if __name__ == "__main__":
-    ConnectNERvGear()
-    app = MyApplication("This is TheSeeCore. Welcome home sir")
-    LinkStart()
+    TSC.ConnectTheSeedCore()
+    TSC.MainEventLoop().create_task(main_function())
+    TSC.MainEventLoop().create_task(countdown())
+    TSC.LinkStart()
+
 ```
 
 ### Qt模式
 
 1. Qt模式依赖 `qasync` 库来管理Qt事件循环，集成 `PyQt` / `PySide` 时，请确保安装了 `qasync` 库，以确保异步任务和回调的正确执行。
 
-2. 在程序入口处实例 `QApplication` 后，TheSeedCore会自动识别 `QApplication` 实例并使用 `qasync` 库来管理Qt事件循环。
+2. 如果使用的是PySide6.7.0及以上版本可以不依赖 `qasync` 库。
 
-3. 在Qt模式下请确保在程序入口处实例 `QApplication` 后再调用 `ConnectNERvGear` 方法，否则即使安装了Qt库也无法正确执行异步任务和回调，并可能会导致UI未响应。
+3. 在Qt模式下请确保在程序入口处实例 `QApplication` 后再调用 `ConnectTheSeedCore` 方法，否则即使安装了Qt库也无法正确执行异步任务和回调，并可能会导致UI未响应。
 
 4. TheSeedCore会自动将 `QApplication` 实例的 `aboutToQuit` 信号连接到 `LinkStop` 方法，以确保在退出应用时正确关闭TheSeedCore。
 
-```
+```python
+
+import asyncio
 import sys
+import time
+from typing import TYPE_CHECKING
 
-# 这里替换为PyQt或PySide
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QApplication
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QTextEdit
+from qasync import asyncSlot
 
-from TheSeedCore import linkStart
+import TheSeedCore as TSC
+
+if TYPE_CHECKING:
+    pass
 
 
-class MyApplication:
-    def __init__(self):
-        self.widget = QWidget()
-        self.widget.setWindowTitle("TheSeedCoreQtMode")
-        self.widget.setMinimumSize(600, 400)
-        self.layout = QVBoxLayout(self.widget)
-        self.label = QLabel("TheSeedCore")
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.label)
-        self.widget.show()
+class TestWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._main_layout = QVBoxLayout(self)
+        self._sub_layout = QHBoxLayout()
+        self._v_layout1 = QVBoxLayout()
+        self._v_layout2 = QVBoxLayout()
+
+        self._current_time_label = QLabel(self)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._update_current_time)
+        self._timer.start(1000)
+        self._batch_test_button = QPushButton("Batch Test", self)
+
+        self._process_total_time_label = QLabel(self)
+        self._process_result_text_edit = QTextEdit(self)
+        self._start_process_test_button = QPushButton("Start Process Test", self)
+
+        self._thread_total_time_label = QLabel(self)
+        self._thread_result_text_edit = QTextEdit(self)
+        self._start_thread_test_button = QPushButton("Start Thread Test", self)
+
+        self._main_layout.addWidget(self._current_time_label)
+        self._main_layout.addWidget(self._batch_test_button)
+        self._main_layout.addLayout(self._sub_layout)
+        self._sub_layout.addLayout(self._v_layout1)
+        self._sub_layout.addLayout(self._v_layout2)
+
+        self._v_layout1.addWidget(self._process_total_time_label)
+        self._v_layout1.addWidget(self._start_process_test_button)
+        self._v_layout1.addWidget(self._process_result_text_edit)
+
+        self._v_layout2.addWidget(self._thread_total_time_label)
+        self._v_layout2.addWidget(self._start_thread_test_button)
+        self._v_layout2.addWidget(self._thread_result_text_edit)
+
+        self._batch_test_button.clicked.connect(self._start_batch_test)
+        self._start_process_test_button.clicked.connect(self._start_process_test)
+        self._start_thread_test_button.clicked.connect(self._start_thread_test)
+        self.setMinimumHeight(600)
+
+        self._process_total_time = 0
+        self._process_task_total_count = 0
+        self._thread_total_time = 0
+        self._thread_task_total_count = 0
+
+    def _start_batch_test(self):
+        start_time = time.time()
+        TSC.submitSystemThreadTask(TSC.submitProcessTask, 1000, self.process_test_function, callback=self.process_test_callback, start_time=start_time)
+        TSC.submitSystemThreadTask(TSC.submitThreadTask, 1000, self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
+
+    @asyncSlot()
+    async def _start_process_test(self):
+        start_time = time.time()
+        for i in range(1000):
+            TSC.submitProcessTask(self.process_test_function, callback=self.process_test_callback, start_time=start_time)
+
+    @asyncSlot()
+    async def _start_thread_test(self):
+        start_time = time.time()
+        for i in range(1000):
+            TSC.submitThreadTask(self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
+
+    @staticmethod
+    def process_test_function(start_time: float):
+        """ 测试方法，可以是异步任务也可以是同步任 """
+        current_time = time.time()
+        result = 0
+        for i in range(10 ** 7):
+            result += i ** 2
+        execution_time = time.time() - current_time
+        return current_time - start_time, start_time, execution_time
+
+    @staticmethod
+    async def thread_test_function(start_time: float):
+        """ 测试方法，可以是异步任务也可以是同步任务 """
+        current_time = time.time()
+        # time.sleep(2)
+        await asyncio.sleep(2)
+        execution_time = time.time() - current_time
+        return current_time - start_time, start_time, execution_time
+
+    # noinspection PyUnresolvedReferences
+    @staticmethod
+    def process_gpu_test_function(start_time: float):
+        current_time = time.time()
+        x = torch.randn(3000, 3000).cuda()
+        y = torch.randn(3000, 3000).cuda()
+        result = torch.matmul(x, y)
+        execution_time = time.time() - current_time
+        return current_time - start_time, start_time, execution_time
+
+    def process_test_callback(self, result):
+        """测试回调函数，必须接受一个参数来接收任务执行结果"""
+        self._process_task_total_count += 1
+        current_time = time.time()
+        self._process_total_time += result[2]
+        self._process_total_time_label.setText(f"Process Total Time: {self._process_total_time:.3f}")
+        self._process_result_text_edit.append(f"[Process] {self._process_task_total_count}.arrivals time: {result[0]:.3f}")
+        self._process_result_text_edit.append(f"[Process] {self._process_task_total_count}.execution time: {result[2]:.3f}")
+        self._process_result_text_edit.append(f"[Process] {self._process_task_total_count}.callback time: {current_time - result[1]:.3f}")
+
+    def thread_test_callback(self, result):
+        """测试回调函数，必须接受一个参数来接收任务执行结果"""
+        self._thread_task_total_count += 1
+        current_time = time.time()
+        self._thread_total_time += result[2]
+        self._thread_total_time_label.setText(f"Thread Total Time: {self._thread_total_time:.3f}")
+        self._thread_result_text_edit.append(f"[Thread] {self._thread_task_total_count}.arrivals time: {result[0]:.3f}")
+        self._thread_result_text_edit.append(f"[Thread] {self._thread_task_total_count}.execution time: {result[2]:.3f}")
+        self._thread_result_text_edit.append(f"[Thread] {self._thread_task_total_count}.callback time: {current_time - result[1]:.3f}")
+
+    def _update_current_time(self):
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        self._current_time_label.setText(f"Current Time: {current_time}")
 
 
 if __name__ == "__main__":
-    qt_app = QApplication(sys.argv)
-    ConnectNERvGear()
-    window = MyApplication()
-    LinkStart()
+    qt = QApplication(sys.argv)
+    TSC.ConnectTheSeedCore()
+    w = TestWidget()
+    w.show()
+    TSC.LinkStart()
 
 ```
 
-### 并发系统
-
-- **_队列和模式_**
-    - 系统使用生产者-消费者模式，并使用非阻塞队列进行IPC(Inter-Process Communication)
-        1. 全局任务队列：由全局线程任务队列和全局进程任务队列组成。
-        2. 进程 / 线程任务队列：每个进程和线程都有自己的任务队列，并且实现了优先级机制。
-
-- **_延迟_**
-    - 由于队列的特性，IPC会有一定的延迟，下面是8个进程100次网络请求任务的单任务延迟和多任务延迟的测试结果。
-        1. 单任务到达时间
-            1. 最小时间：约 0.1313 秒
-            2. 平均时间：约 0.1851 秒
-            3. 最大时间：约 0.2491 秒
-        2. 多任务到达时间
-            1. 最小时间：约 0.1965 秒
-            2. 平均时间：约 6.8159 秒
-            3. 最大时间：约 13.9273 秒
-        3. 实际的延迟可能会受到以下因素的影响
-            1. 系统负载
-            2. 数据量和复杂性
-            3. 网络和硬件环境
-
-- **_线程_**
-    - 系统线程
-        1. 负载均衡线程：轮询检查进程和线程的负载情况并根据配置的负载均衡策略来扩展和收缩线程和进程。
-        2. 进程任务分配线程：轮询从全局进程任务队列中获取任务并根据所有进程的负载情况分配任务。
-        3. 线程任务分配线程：轮询从全局线程任务队列中获取任务并根据所有线程的负载情况分配任务。
-    - 核心线程/扩展线程
-        1. 核心线程和扩展线程主要运行在主进程中，适合处理一些IO密集型任务。
-        2. 核心线程会在系统启动时创建并一直运行，扩展线程会根据负载均衡策略自动创建和销毁。
-
-- **_进程_**
-    - 进程线程
-        1. 每个进程除了主线程外，还有一条状态更新线程，用于更新进程的负载情况。
-        2. 系统会根据配置创建一定数量的进程，如果没有指定则根据物理CPU核心数动态创建并设置最大进程数。
-        3. 核心进程会在系统启动时创建并一直运行，扩展进程会根据负载均衡策略自动创建和销毁。
-
-- **_配置_**
-    - `ConcurrentSystemConfig`
-        - **`CoreProcessCount`**：核心进程数，默认为None，系统会根据物理CPU核心数动态设置。
-        - **`CoreThreadCount`**：核心线程数，默认为None，系统会根据核心进程数动态设置。
-        - **`MaximumProcessCount`**：最大进程数，默认为None，系统会根据CPU核心数动态设置。
-        - **`MaximumThreadCount`**：最大线程数，默认为None，系统会根据最大进程数动态设置。
-        - **`IdleCleanupThreshold`**：进程内存空闲清理阈值，默认为None，系统会根据负载均衡策略自动清理进程内存。
-        - **`ProcessPriority`**：进程优先级，默认为NORMAL。
-        - **`TaskThreshold`**：任务阈值，默认为None，系统会根据物理CPU核心数和物理内存自动计算阈值。
-        - **`GlobalTaskThreshold`**：全局任务队列阈值，默认为None，系统会根据物理CPU核心数和物理内存总量自动计算阈值。
-        - **`ExpandPolicy`**：扩展策略，默认为 `AutoExpand` 。
-        - **`ShrinkagePolicy`**：收缩策略，默认为 `AutoShrink` 。
-        - **`ShrinkagePolicyTimeout`**：可以理解为KeepAlive的时间，默认15秒。如果收缩策略为 `AutoShrink` 扩展线程/进程在没有工作和任务时超过这个时间将会被销毁。
-      ```
-      from TheSeedCore import *
-  
-      config = ConcurrentSystemConfig(
-          CoreProcessCount=2,
-          CoreThreadCount=6,
-          MaximumProcessCount=8,
-          MaximumThreadCount=12,
-          IdleCleanupThreshold=10,
-          ProcessPriority="NORMAL",
-          TaskThreshold=100,
-          GlobalTaskThreshold=1000,
-          ExpandPolicy="AutoExpand",
-          ShrinkagePolicy="AutoShrink",
-          ShrinkagePolicyTimeout=30
-      )
-  
-      if __name__ == "__main__":
-          ConnectNERvGear()
-          LinkStart()
-      ```
-
-- **_提交任务_**
-    - 提交进程任务 `submitProcessTask` 时，请注意被提交的函数上下文中不能带有不可被序列化的对象，否则任务会被拒绝。
-    - 例如下面这个例子，我们提交了4个矩阵乘法任务，但是由于任务绑定了窗口对象 `TestWidget` ，所以任务会被拒绝。
-    ```
-    import sys
-    import time
-
-    import numpy as np
-    from PySide6.QtCore import QObject
-    from PySide6.QtWidgets import QWidget, QApplication, QVBoxLayout, QPushButton, QTextEdit
-
-    from TheSeedCore import *
-  
-    class TestWidget(QWidget):
-      def __init__(self, parent=None):
-          super().__init__(parent)
-          self.Layout = QVBoxLayout(self)
-          self.TextEdit = QTextEdit(self)
-          self.Button = QPushButton(self)
-          self.Layout.addWidget(self.TextEdit)
-          self.Layout.addWidget(self.Button)
-          self.Button.clicked.connect(self.button_clicked)
-          self.show()
-
-      def button_clicked(self):
-          for i in range(4):
-              ConcurrentSystem.submitProcessTask(self.factorial, callback=self.updateInfo, count=i, size=3000)
-  
-      # @staticmethod # 将其改为静态方法并移除self参数后任务将会被接受
-      def factorial(self, count, size):
-          matrix1 = np.random.rand(size, size)
-          matrix2 = np.random.rand(size, size)
-          start_time = time.time()
-          result = np.dot(matrix1, matrix2)
-          end_time = time.time()
-          elapsed_time = end_time - start_time
-          t = f"{count}.矩阵乘法执行时间（{size}x{size}矩阵）: {elapsed_time:.3f}秒"
-          et = elapsed_time
-          return t, et
-
-      def updateInfo(self, result):
-          self.TextEdit.append(f"{result[0]}")
-
-
-      if __name__ == "__main__":
-          qt = QApplication(sys.argv)
-          ConnectNERvGear(check_env_support=False)
-          TW = TestWidget()
-          LinkStart()
-    ```
-    - 提交线程任务 `submitThreadTask` 时，被提交的函数上下文中可以带有不可被序列化的对象，但是请确保这些对象是线程安全的。
-    - `submitProcessTask` 和 `submitThreadTask` 方法用于提交进程任务和线程任务，参数是一致的。
-        - **task**：任务函数。
-        - **priority**：任务优先级，默认为0。
-        - **callback**：任务完成后的回调函数，默认为None。
-        - **lock**：是否锁定任务，默认为False。
-        - **lock_timeout**：锁的获取超时时间，默认为3。
-        - **timeout**：任务超时时间，默认为None。
-        - **gpu_boost**：是否使用GPU加速，默认为False。
-        - **gpu_id**：GPU ID，默认为0。
-        - **retry**：是否重试，True。
-        - **max_retries**：最大重试次数，默认为3。
-        - ***args**：任务函数的参数。
-        - ****kwargs**：任务函数的关键字参数。
-      ```
-      import time
-      from TheSeedCore import *
-      
-      def testIOBound():
-          start_time = time.time()
-          time.sleep(1)  # 模拟IO操作
-          result = time.time() - start_time
-          return f"{result:.4f}\n"
-      
-      def testCallback(result):
-          print(result)
-      
-      if __name__ == "__main__":
-          ConnectNERvGear()
-          for i in range(10):
-              ConcurrentSystem.submitProcessTask(testIOBound, callback=testCallback)
-          LinkStart()
-      ```
-
-### 模块调用
-
-1. **TheSeedCore 的模块都是独立的，在依赖允许的情况下可以单独调用或与其他模块组合使用。**
-2. **可以使用 `from TheSeedCore import *` 导入所有可用类和接口**
-3. **在调用模块之前请确保已经安装了该模块所需的依赖。**
+### 并发
+- **任务参数**：
+  - **`task`**：任务函数。
+  - **`priority`**：任务优先级，可选，范围0-10，值越低优先级越高，默认为0。
+  - **`callback`**：任务回调函数，可选。
+  - **`future`**：提交任务后立即返回的任务的Future对象，可选, 默认为TaskFuture类的实例对象。
+  - **`lock`**：任务锁，可选。
+  - **`lock_timeout`**：任务锁超时时间，可选。
+  - **`timeout`**：任务超时时间，可选。
+  - **`gpu_boost`**：GPU加速，可选，默认为False。
+  - **`gpu_id`**：GPU设备ID，可选，默认为0。
+  - **`retry`**：任务是否重试，可选，默认为True。
+  - **`max_retries`**：最大重试次数，可选，默认为3。
+- **submitProcessTask**：提交一个进程任务。
+- **submitThreadTask**：提交一个线程任务。
+- **submitSystemProcessTask**：提交一个系统进程任务。
+- **submitSystemThreadTask**：提交一个系统线程任务。
 
 ### 目录
 
@@ -399,42 +395,8 @@ if __name__ == "__main__":
 
 ### 加密
 
-- **_AES_**
-    1. TheSeedCore 的加密器被设计为启动时使用 _设备编码_ + _自定义key_ 来生成 `Keyring` 的唯一标识符并使用该标识符存储AES秘钥。
-    2. 如果分发时携带了使用 `aesEncryptData` 或 `aesEncrypt` 方法加密的数据，或数据库使用了数据加密，分发的应用将无法解密数据
-
-- **_RSA_**
-    1. `generateRSAKeys`方法会立即返回未加密的公私钥对
-    2. 如果指定了存储路径和 `store_locally` 参数，TheSeedCore 会使用该加密器实例的AES将私钥加密后存储在指定的路径
-
-- **如果分发时必须携带加密数据，可以采用以下方案**。
-    1. 使用 `generateRSAKeys` 方法不指定存储路径生成公私钥对
-    2. 使用 `generateRSAKeys` 方法返回的公钥加密数据，然后将私钥手动保存或将私钥不加密存储进数据库中，分发时携带私钥
-    3. 运行时使用私钥解密数据后在客户端再次将数据加密存储，随后删除私钥。
-
-## 快速开始
-
-```
-pip install requirements.txt
-```
-
-```
-import asyncio
-from TheSeedCore import *
-
-async def testFunction():
-    print("This is TheSeedCore. Welcome home sir")
-    for i in range(10):
-        await asyncio.sleep(1)
-        print("System shutdown countdown:", 10 - i)
-    print("System shutdown")
-    LinkStop()
-    
-if __name__ == "__main__":
-    ConnectNERvGear()
-    MainEventLoop.create_task(testFunction())
-    LinkStart()
-```
+1. TheSeedCore 的加密器被设计为启动时使用 _设备编码_ + _自定义key_ 来生成 `Keyring` 的唯一标识符并使用该标识符存储AES秘钥。
+2. 如果分发时携带了加密的数据，或数据库使用了数据加密，被分发的应用将无法解密数据
 
 ## 接口文档
 
