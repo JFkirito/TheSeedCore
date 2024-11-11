@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QTextEdit
-from qasync import asyncSlot
 
 import TheSeedCore as TSC
 
@@ -67,13 +66,13 @@ class TestWidget(QWidget):
         TSC.submitSystemThreadTask(TSC.submitProcessTask, 1000, self.process_test_function, callback=self.process_test_callback, start_time=start_time)
         TSC.submitSystemThreadTask(TSC.submitThreadTask, 1000, self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
 
-    @asyncSlot()
+    @TSC.AsyncTask()
     async def _start_process_test(self):
         start_time = time.time()
         for i in range(100):
             TSC.submitProcessTask(self.process_test_function, callback=self.process_test_callback, start_time=start_time)
 
-    @asyncSlot()
+    @TSC.AsyncTask()
     async def _start_thread_test(self):
         start_time = time.time()
         for i in range(100):
@@ -93,7 +92,6 @@ class TestWidget(QWidget):
     async def thread_test_function(start_time: float):
         """ 测试方法，可以是异步任务也可以是同步任务 """
         current_time = time.time()
-        # time.sleep(2)
         await asyncio.sleep(2)
         execution_time = time.time() - current_time
         return current_time - start_time, start_time, execution_time

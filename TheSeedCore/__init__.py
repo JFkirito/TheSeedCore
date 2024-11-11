@@ -13,6 +13,9 @@ __all__ = [
     "LogsDirectoryPath",
     "ConnectTheSeedCore",
     "MainEventLoop",
+    "AsyncTask",
+    "ProcessTask",
+    "ThreadTask",
     "LinkStart",
     "LinkStop",
     # Common
@@ -24,6 +27,7 @@ __all__ = [
     "ShrinkagePolicy",
     "TaskFuture",
     "serviceProcessID",
+    "submitAsyncTask",
     "submitProcessTask",
     "submitThreadTask",
     "submitSystemProcessTask",
@@ -52,12 +56,12 @@ import asyncio
 import os
 import platform
 import sys
-from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack
+from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack, Callable
 
 if TYPE_CHECKING:
     pass
 
-__version__: str = "0.1.2"
+__version__: str = "0.1.3"
 __author__: str = "B站疾风Kirito"
 __website__: str = "https://space.bilibili.com/6440741"
 __repository__: str = "https://github.com/JFkirito/TheSeedCore"
@@ -206,40 +210,26 @@ def _connectLinkStop():
         QApplication.instance().aboutToQuit.connect(LinkStop)
 
 
-def _compareVersions(version1: str, version2: str):
-    """
-    Compares two version strings.
-
-    This function compares two version strings in the format 'major.minor.patch'
-    and returns:
-        -1 if version1 is less than version2,
-         0 if version1 is equal to version2,
-         1 if version1 is greater than version2.
-
-    :param version1: The first version string to compare.
-    :param version2: The second version string to compare.
-    :return: An integer indicating the comparison result.
-        - Returns -1 if version1 < version2
-        - Returns 0 if version1 == version2
-        - Returns 1 if version1 > version2
-    setup:
-        1. Split both version strings into their respective parts.
-        2. Normalize the lengths of the version parts by extending with zeros.
-        3. Compare the parts in order until a difference is found or all parts are equal.
-    """
-
-    v1_parts = [int(part) for part in version1.split('.')]
-    v2_parts = [int(part) for part in version2.split('.')]
+def _compareVersions(current_version: str, target_version: str, comparison: Literal["==", "!=", "<", "<=", ">", ">="]) -> bool:
+    v1_parts = [int(part) for part in current_version.split('.')]
+    v2_parts = [int(part) for part in target_version.split('.')]
     length = max(len(v1_parts), len(v2_parts))
     v1_parts.extend([0] * (length - len(v1_parts)))
     v2_parts.extend([0] * (length - len(v2_parts)))
-
-    for v1, v2 in zip(v1_parts, v2_parts):
-        if v1 < v2:
-            return -1
-        elif v1 > v2:
-            return 1
-    return 0
+    if comparison == "==":
+        return v1_parts == v2_parts
+    elif comparison == "!=":
+        return v1_parts != v2_parts
+    elif comparison == "<":
+        return v1_parts < v2_parts
+    elif comparison == "<=":
+        return v1_parts <= v2_parts
+    elif comparison == ">":
+        return v1_parts > v2_parts
+    elif comparison == ">=":
+        return v1_parts >= v2_parts
+    else:
+        raise ValueError(f"Invalid comparison operator: {comparison}")
 
 
 def _createMainEventLoop(**config: Unpack[_TheSeedCoreConfig]) -> asyncio.AbstractEventLoop:
@@ -267,7 +257,7 @@ def _createMainEventLoop(**config: Unpack[_TheSeedCoreConfig]) -> asyncio.Abstra
 
     global _QtMode
     if _PySide6Support and _checkQtApplicationInstance():
-        if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0") >= 0:
+        if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0", ">="):
             from PySide6.QtAsyncio import QAsyncioEventLoopPolicy
             default_event_loop_policy = asyncio.get_event_loop_policy()
             asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("quit_qapp", True), handle_sigint=config.get("handle_sigint", False)))
@@ -437,6 +427,96 @@ def MainEventLoop() -> asyncio.AbstractEventLoop:
 
     global _MainEventLoop
     return _MainEventLoop
+
+
+def AsyncTask(func: Optional[Callable] = None) -> Callable:
+    """
+    Decorator for submitting asynchronous tasks as coroutines.
+
+    This decorator is used to ensure that a function is executed as a coroutine and can be submitted to the main event loop.
+    If the function is not already a coroutine, a `TypeError` is raised. This allows you to submit async functions as tasks
+    to be executed asynchronously.
+
+    :param func: The function to be decorated (optional). If provided, it directly decorates the function.
+                 Otherwise, it returns a decorator to be applied to a function.
+    :return: A coroutine task that is submitted to the event loop.
+    :raises: TypeError if the decorated function is not a coroutine.
+    setup:
+        1. The decorator checks if the function is a coroutine.
+        2. If the function is a coroutine, it wraps it and submits it to the event loop.
+        3. The result is an asynchronous task that can be awaited or tracked in the event loop.
+    """
+
+    def decorator(actual_func: Callable) -> Callable:
+        if not asyncio.iscoroutinefunction(actual_func):
+            raise TypeError(f"The function <{actual_func.__name__}> must be a coroutine.")
+
+        def wrapper(*args, **kwargs):
+            func_future = MainEventLoop().create_task(actual_func(*args, **kwargs))
+            return func_future
+
+        return wrapper
+
+    if func is None:
+        return decorator
+    else:
+        return decorator(func)
+
+
+def ProcessTask(priority=0, callback=None, future=None) -> Callable:
+    """
+    Decorator for submitting process tasks with specified priority and optional callback or future handling.
+
+    This decorator is used to wrap a task function so that it can be submitted for execution as a process task.
+    It allows specifying the priority of the task, an optional callback function to handle the result, and an optional
+    `future` object for asynchronous task handling.
+
+    :param priority: The priority of the task (default is 0). Higher values indicate higher priority.
+    :param callback: An optional callback function that will be executed once the task completes.
+    :param future: An optional `future` object that can be used to track the task's result.
+    :return: A wrapped version of the original function that submits the task to the process pool.
+    :raises: None
+    setup:
+        1. Takes a function `func` that represents the task to be executed.
+        2. The decorator wraps the task function and submits it to the process pool with the specified priority.
+        3. Allows the specification of a callback and future for task completion handling.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args, **kwargs) -> TaskFuture:
+            return submitProcessTask(func, priority, callback, future, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def ThreadTask(priority=0, callback=None, future=None) -> Callable:
+    """
+    Decorator for submitting thread tasks with specified priority and optional callback or future handling.
+
+    This decorator function is used to wrap a task function so that it can be submitted for execution as a thread task.
+    It allows specifying the priority of the task, an optional callback function to handle the result, and an optional
+    `future` object for asynchronous task handling.
+
+    :param priority: The priority of the task (default is 0). Higher values indicate higher priority.
+    :param callback: An optional callback function that will be executed once the task completes.
+    :param future: An optional `future` object that can be used to track the task's result.
+    :return: A wrapped version of the original function that submits the task to the thread pool.
+    :raises: None
+    setup:
+        1. Takes a function `func` that represents the task to be executed.
+        2. The decorator wraps the task function and submits it to the thread pool with the specified priority.
+        3. Allows the specification of a callback and future for task completion handling.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args, **kwargs) -> TaskFuture:
+            return submitThreadTask(func, priority, callback, future, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 def ConnectTheSeedCore(**config: Unpack[_TheSeedCoreConfig]):

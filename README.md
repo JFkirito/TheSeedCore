@@ -144,9 +144,8 @@ if __name__ == "__main__":
     - **`ShrinkagePolicy`**：收缩策略，默认为`ShrinkagePolicy.AutoShrink`。
     - **`ShrinkagePolicyTimeout`**：收缩策略超时时间，默认为`15`。
     - **`PerformanceReport`**：性能报告，为`True`时启用，默认为`True`。
-2. 如果要兼容PyQt或PySide，请确保 `ConnectTheSeedCore` 的调用在实例化 `QApplication` 之后，并且实例您的应用程序后调用 `LinkStart` 方法启动TheSeedCore。
-3. `ConnectTheSeedCore`会自动创建主事件循环，您可以调用 `MainEventLoop()` 来获取主事件循环并进行操作。
-4. 退出应用时请调用 `LinkStop` 方法，该方法会清理所有由TheSeedCore创建的所有资源后关闭主事件循环并退出应用程序。
+2. `ConnectTheSeedCore`会自动创建主事件循环，您可以调用 `MainEventLoop()` 来获取主事件循环并进行操作。
+3. 退出应用时请调用 `LinkStop` 方法，该方法会清理所有由TheSeedCore创建的所有资源后关闭主事件循环并退出应用程序。
 
 ```python
 import asyncio
@@ -212,11 +211,13 @@ if __name__ == "__main__":
 
 1. Qt模式依赖 `qasync` 库来管理Qt事件循环，集成 `PyQt` / `PySide` 时，请确保安装了 `qasync` 库，以确保异步任务和回调的正确执行。
 
-2. 如果使用的是PySide6.7.0及以上版本可以不依赖 `qasync` 库。
+2. 如果使用的是 `PySide6.7.0` 及以上版本可以不依赖 `qasync` 库。
 
 3. 在Qt模式下请确保在程序入口处实例 `QApplication` 后再调用 `ConnectTheSeedCore` 方法，否则即使安装了Qt库也无法正确执行异步任务和回调，并可能会导致UI未响应。
 
 4. TheSeedCore会自动将 `QApplication` 实例的 `aboutToQuit` 信号连接到 `LinkStop` 方法，以确保在退出应用时正确关闭TheSeedCore。
+
+5. 如果要兼容PyQt或PySide，请确保 `ConnectTheSeedCore` 的调用在实例化 `QApplication` 之后，并且实例您的应用程序后调用 `LinkStart` 方法启动TheSeedCore。
 
 ```python
 
@@ -227,7 +228,6 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QTextEdit
-from qasync import asyncSlot
 
 import TheSeedCore as TSC
 
@@ -286,13 +286,13 @@ class TestWidget(QWidget):
         TSC.submitSystemThreadTask(TSC.submitProcessTask, 1000, self.process_test_function, callback=self.process_test_callback, start_time=start_time)
         TSC.submitSystemThreadTask(TSC.submitThreadTask, 1000, self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
 
-    @asyncSlot()
+    @TSC.AsyncTask()
     async def _start_process_test(self):
         start_time = time.time()
         for i in range(1000):
             TSC.submitProcessTask(self.process_test_function, callback=self.process_test_callback, start_time=start_time)
 
-    @asyncSlot()
+    @TSC.AsyncTask()
     async def _start_thread_test(self):
         start_time = time.time()
         for i in range(1000):
@@ -362,22 +362,29 @@ if __name__ == "__main__":
 ```
 
 ### 并发
+
+- **装饰器**：
+    - **`@AsyncTask`**：异步任务装饰器，用于将异步函数提交到主事件循环执行。
+    - **`@ProcessTask`**：进程任务装饰器，用于将进程任务提交到进程池执行。
+    - **`@ThreadTask`**：线程任务装饰器，用于将线程任务提交到线程池执行。
 - **任务参数**：
-  - **`task`**：任务函数。
-  - **`priority`**：任务优先级，可选，范围0-10，值越低优先级越高，默认为0。
-  - **`callback`**：任务回调函数，可选。
-  - **`future`**：提交任务后立即返回的任务的Future对象，可选, 默认为TaskFuture类的实例对象。
-  - **`lock`**：任务锁，可选。
-  - **`lock_timeout`**：任务锁超时时间，可选。
-  - **`timeout`**：任务超时时间，可选。
-  - **`gpu_boost`**：GPU加速，可选，默认为False。
-  - **`gpu_id`**：GPU设备ID，可选，默认为0。
-  - **`retry`**：任务是否重试，可选，默认为True。
-  - **`max_retries`**：最大重试次数，可选，默认为3。
-- **submitProcessTask**：提交一个进程任务。
-- **submitThreadTask**：提交一个线程任务。
-- **submitSystemProcessTask**：提交一个系统进程任务。
-- **submitSystemThreadTask**：提交一个系统线程任务。
+    - **`task`**：任务函数。
+    - **`priority`**：任务优先级，可选，范围0-10，值越低优先级越高，默认为0。
+    - **`callback`**：任务回调函数，可选。
+    - **`future`**：提交任务后立即返回的任务的Future对象，可选, 默认为TaskFuture类的实例对象。
+    - **`lock`**：任务锁，可选。
+    - **`lock_timeout`**：任务锁超时时间，可选。
+    - **`timeout`**：任务超时时间，可选。
+    - **`gpu_boost`**：GPU加速，可选，默认为False。
+    - **`gpu_id`**：GPU设备ID，可选，默认为0。
+    - **`retry`**：任务是否重试，可选，默认为True。
+    - **`max_retries`**：最大重试次数，可选，默认为3。
+- **任务提交**：
+    - **`submitAsyncTask`**：提交一个异步任务到主事件循环。
+    - **`submitProcessTask`**：提交一个进程任务。
+    - **`submitThreadTask`**：提交一个线程任务。
+    - **`submitSystemProcessTask`**：提交一个系统进程任务。
+    - **`submitSystemThreadTask`**：提交一个系统线程任务。
 
 ### 目录
 
@@ -387,11 +394,9 @@ if __name__ == "__main__":
 
 - **_TheSeedCoreData_**
     1. `Database` ： 数据库文件夹。
-    2. `ExternalServices` ： 外部服务文件夹。
-    3. `Logs` ： 日志文件夹。
-
-- **_ExternalLibrary_**
-    1. 外部库文件夹。
+    2. `Logs` ： 日志文件夹。
+- **_TheSeedCoreExternalService_**: 外部服务文件夹
+- **_TheSeedCoreExternalLibrary_**: 外部库文件夹
 
 ### 加密
 

@@ -7,6 +7,7 @@ __all__ = [
     "ShrinkagePolicy",
     "TaskFuture",
     "serviceProcessID",
+    "submitAsyncTask",
     "submitProcessTask",
     "submitThreadTask",
     "submitSystemProcessTask",
@@ -26,7 +27,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, CancelledError, ProcessPoolExecutor
 from enum import Enum
-from typing import TYPE_CHECKING, Union, Optional, Dict, Tuple, Any, Literal, List, TypedDict, Unpack
+from typing import TYPE_CHECKING, Union, Optional, Dict, Tuple, Any, Literal, List, TypedDict, Unpack, Callable, Coroutine
 
 from .Logger import TheSeedCoreLogger, consoleLogger
 from ._Common import _checkPackage, PerformanceMonitor, TextColor  # noqa
@@ -3880,6 +3881,31 @@ def serviceProcessID() -> int:
     return _ConcurrentSystem.INSTANCE.StatusManager.SharedObjectManagerID
 
 
+def submitAsyncTask(task: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> asyncio.Future:
+    """
+    Submits an asynchronous task to the main event loop.
+
+    This function allows scheduling a coroutine task for execution in the main event loop. It ensures the provided
+    task is a coroutine function before submitting it.
+
+    :param task: The coroutine function to execute asynchronously.
+    :param args: Positional arguments to pass to the task function.
+    :param kwargs: Keyword arguments to pass to the task function.
+    :return: An asyncio `Future` object representing the scheduled coroutine task.
+    :raises TypeError: If the provided task is not a coroutine function.
+    setup:
+        1. Imports the `MainEventLoop` function to access the primary event loop.
+        2. Checks if the provided `task` is a coroutine function.
+        3. Schedules the task on the main event loop and returns it as a `Future` object.
+    """
+
+    from . import MainEventLoop
+    if not asyncio.iscoroutinefunction(task):
+        raise TypeError(f"The task <{task.__name__}> must be a coroutine function.")
+    task_future = MainEventLoop().create_task(task(*args, **kwargs))
+    return task_future
+
+
 def submitProcessTask(task: callable, priority: int = 0, callback: Optional[callable] = None, future: Optional[type(TaskFuture)] = None, *args, **kwargs: Unpack[_TaskConfig]) -> TaskFuture:
     """
     Submits a task for processing with an optional priority and callback.
@@ -3891,7 +3917,8 @@ def submitProcessTask(task: callable, priority: int = 0, callback: Optional[call
     :param args: Additional positional arguments to pass to the task.
     :param kwargs: Additional keyword arguments to pass to the task configuration.
     :return: A TaskFuture instance associated with the submitted task.
-    :raise: Raises a RuntimeError if the task submission is attempted outside the main process, if the ConcurrentSystem is not initialized, or if the core process count is zero.
+    :raise: Raises a RuntimeError if the task submission is attempted outside the main process,
+            if the ConcurrentSystem is not initialized, or if the core process count is zero.
     setup:
         1. Check if the current process is the main process; raise an error if not.
         2. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
