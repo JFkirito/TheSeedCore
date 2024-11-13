@@ -2083,7 +2083,7 @@ class _ThreadObject(threading.Thread):
             _DefaultLogger.error(f"[{self.ThreadName} - {self.ident}] has been terminated due to {e}.")
         finally:
             self.EventLoop.close()
-            _DefaultLogger.info(f"[{self.ThreadName} - {self.ident}] has been stopped.")
+            _DefaultLogger.info(f"[{self.ThreadName} - {self.ident}] has been closed.")
 
     def stop(self) -> None:
         self.CloseEvent.set()
@@ -2943,7 +2943,7 @@ class _LoadBalancer(threading.Thread):
             else:
                 current_expand_process_total_load: int = 0
             process_total_load = max(0, min(100, current_core_process_total_load + current_expand_process_total_load))
-            ideal_load_per_process = 90
+            ideal_load_per_process = 95
             if process_total_load >= ideal_load_per_process:
                 allow_process_expansion = self._isAllowExpansion("Process")
                 if allow_process_expansion and not _ProcessTaskSchedulingEvent.is_set():
@@ -2962,14 +2962,14 @@ class _LoadBalancer(threading.Thread):
             current_expand_thread_total_load: int = 0
         thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
         threshold: int = self.ConfigManager.GlobalTaskThreshold.value - (self.ConfigManager.CoreProcessCount.value * self.ConfigManager.TaskThreshold.value)
-        if thread_total_load >= threshold * 0.9:
+        if thread_total_load >= threshold * 0.95:
             allow_thread_expansion = self._isAllowExpansion("Thread")
             if allow_thread_expansion and not _ThreadTaskSchedulingEvent.is_set():
                 _ThreadBalanceEvent.set()
                 self._expandThread()
                 _ThreadBalanceEvent.clear()
             elif not allow_thread_expansion:
-                self.Logger.warning(f"Load reaches {int(threshold)}%, but unable to expand more thread")
+                self.Logger.warning(f"Load reaches {int(threshold * 0.95)}%, but unable to expand more thread")
             else:
                 pass
 

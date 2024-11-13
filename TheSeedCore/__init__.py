@@ -47,6 +47,7 @@ __all__ = [
     "WebSocketServer",
     "WebSocketClient",
     "HTTPServer",
+    "AsyncFlask",
     # Security
     "AESEncryptor",
     "RSAEncryptor"
@@ -61,7 +62,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack, Callable
 if TYPE_CHECKING:
     pass
 
-__version__: str = "0.1.3"
+__version__: str = "0.1.4"
 __author__: str = "B站疾风Kirito"
 __website__: str = "https://space.bilibili.com/6440741"
 __repository__: str = "https://github.com/JFkirito/TheSeedCore"
@@ -74,6 +75,11 @@ ExternalLibraryDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCore
 ExternalServiceDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreExternalService")
 DataDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreData")
 DatabaseDirectoryPath: str = os.path.join(DataDirectoryPath, "Database")
+FlaskServerDataDirectoryPath: str = os.path.join(DataDirectoryPath, "FlaskServer")
+FlaskServerStaticFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Static")
+FlaskServerTemplateFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Templates")
+FlaskServerInstanceFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Instance")
+FlaskServerRootFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Root")
 LogsDirectoryPath: str = os.path.join(DataDirectoryPath, "Logs")
 
 _MainEventLoop: Optional[asyncio.AbstractEventLoop] = None
@@ -89,7 +95,18 @@ from .Logger import *
 from .Network import *
 from .Security import *
 
-_checkPath(ExternalLibraryDirectoryPath, ExternalServiceDirectoryPath, DataDirectoryPath, DatabaseDirectoryPath, LogsDirectoryPath)
+_checkPath(
+    ExternalLibraryDirectoryPath,
+    ExternalServiceDirectoryPath,
+    DataDirectoryPath,
+    DatabaseDirectoryPath,
+    FlaskServerDataDirectoryPath,
+    FlaskServerStaticFolderPath,
+    FlaskServerTemplateFolderPath,
+    FlaskServerInstanceFolderPath,
+    FlaskServerRootFolderPath,
+    LogsDirectoryPath
+)
 
 
 class _TheSeedCoreConfig(TypedDict, total=False):

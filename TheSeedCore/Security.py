@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     pass
 
 _DefaultLogger = consoleLogger("Security")
+
+# Define the AES and RSA encryptor classes
 try:
     import keyring
     from Crypto.Cipher import AES, PKCS1_OAEP
@@ -83,11 +85,11 @@ try:
                     key_name = str(serial_number)
                     _DefaultLogger.debug(f"[Darwin] Serial number : {key_name}")
                 else:
-                    _DefaultLogger.error(f"Generate identifier error : Unsupported OS type.")
+                    _DefaultLogger.error(f"Generate identifier error : Unsupported OS type.", exc_info=True)
                     return f"{self._Name}"
                 return key_name
             except Exception as e:
-                _DefaultLogger.error(f"Generate identifier error : {e}")
+                _DefaultLogger.error(f"Generate identifier error : {e}", exc_info=True)
                 return f"{self._Name}"
 
         def _loadAESKey(self) -> bytes | None:
@@ -115,7 +117,7 @@ try:
                     self._saveAESKey(aes_key)
                     return aes_key
             except Exception as e:
-                _DefaultLogger.error(f"Load AES key error : {e}")
+                _DefaultLogger.error(f"Load AES key error : {e}", exc_info=True)
 
         def _saveAESKey(self, key):
             """
@@ -137,7 +139,7 @@ try:
                 encoded_key = base64.b64encode(key).decode("utf-8")
                 keyring.set_password(self._Key, self._Name, encoded_key)
             except Exception as e:
-                _DefaultLogger.error(f"Save AES key error : {e}")
+                _DefaultLogger.error(f"Save AES key error : {e}", exc_info=True)
 
 
     class AESEncryptor(_BaseEncryptor):
@@ -186,7 +188,7 @@ try:
                 combined_data = iv + tag + encrypted_data
                 return base64.b64encode(combined_data).decode()
             except Exception as e:
-                _DefaultLogger.error(f"AES encrypt data error : {e}")
+                _DefaultLogger.error(f"AES encrypt data error : {e}", exc_info=True)
                 return ""
 
         def decrypt(self, data: str) -> str:
@@ -216,7 +218,7 @@ try:
                 decrypted_data = aes_cipher.decrypt_and_verify(encrypted_data, tag).decode()
                 return decrypted_data
             except Exception as e:
-                _DefaultLogger.error(f"AES decrypt data error : {e}")
+                _DefaultLogger.error(f"AES decrypt data error : {e}", exc_info=True)
                 return ""
 
 
@@ -269,7 +271,7 @@ try:
                 key_size = 2048
 
             if store_locally and (not private_path or not public_path):
-                _DefaultLogger.error("RSA keys storage paths not provided.")
+                _DefaultLogger.error("RSA keys storage paths not provided.", exc_info=True)
                 return None
 
             key = RSA.generate(key_size)
@@ -307,7 +309,7 @@ try:
                     private_key = priv_file.read()
                 return RSA.import_key(private_key)
             except Exception as e:
-                _DefaultLogger.error(f"Load rsa private key error : {e}")
+                _DefaultLogger.error(f"Load rsa private key error : {e}", exc_info=True)
                 return None
 
         @staticmethod
@@ -334,7 +336,7 @@ try:
                     public_key = pub_file.read()
                 return RSA.import_key(public_key)
             except Exception as e:
-                _DefaultLogger.error(f"Load rsa public key error : {str(e)}")
+                _DefaultLogger.error(f"Load rsa public key error : {e}", exc_info=True)
                 return None
 
         @staticmethod
@@ -388,10 +390,36 @@ except ImportError as _:
     class AESEncryptor:
         # noinspection PyUnusedLocal
         def __init__(self, *args, **kwargs):
-            _DefaultLogger.warning("AESEncryptor is not available. If you want to use AESEncryptor, please install keyring, pycryptodome packages.")
+            _DefaultLogger.warning("AESEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        def encrypt(self, data: str) -> str:
+            raise NotImplementedError("AESEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        def decrypt(self, data: str) -> str:
+            raise NotImplementedError("AESEncryptor is not available. Please install keyring, pycryptodome packages.")
 
 
     class RSAEncryptor:
         # noinspection PyUnusedLocal
         def __init__(self, *args, **kwargs):
-            _DefaultLogger.warning("RSAEncryptor is not available. If you want to use RSAEncryptor, please install keyring, pycryptodome packages.")
+            _DefaultLogger.warning("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        @staticmethod
+        def generateRSAKeys(private_path: str = None, public_path: str = None, key_size=2048, store_locally=False) -> tuple[bytes, bytes] | None:
+            raise NotImplementedError("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        @staticmethod
+        def loadRSAPrivateKey(private_path: str) -> RSA.RsaKey:
+            raise NotImplementedError("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        @staticmethod
+        def loadRSAPublicKey(public_path: str) -> RSA.RsaKey:
+            raise NotImplementedError("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        @staticmethod
+        def rsaEncrypt(public_key: bytes, data: str) -> bytes:
+            raise NotImplementedError("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")
+
+        @staticmethod
+        def rsaDecrypt(private_key: bytes, encrypted_data: bytes) -> str:
+            raise NotImplementedError("RSAEncryptor is not available. Please install keyring, pycryptodome packages.")

@@ -828,6 +828,7 @@ class SQLiteDatabase:
         self._disconnect()
 
 
+# Define the MySQLDatabase class
 try:
     # noinspection PyUnresolvedReferences
     import mysql.connector
@@ -1642,5 +1643,45 @@ try:
             self._disconnect()
 except ImportError as _:
     class MySQLDatabase:
+        # noinspection PyUnusedLocal
         def __init__(self, *args, **kwargs):
-            raise RuntimeError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+            _DefaultLogger.error(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def deleteDatabase(self) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def checkExistedTable(self, table_name: str) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def getExistedTables(self) -> List[str]:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def createTable(self, table_name: str, table_sql: str) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def createTables(self, tables_dict: dict) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def deleteTable(self, table_name: str) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def deleteTables(self, tables: List[str]) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def insertData(self, table_name: str, data: Dict[str, str], encrypt_columns: List[str] = None) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def insertDatas(self, table_name: str, data: List[Dict[str, str]], encrypt_columns: List[str] = None) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def updateData(self, table_name: str, data: Dict[str, str], condition: str, encrypt_columns: List[str] = None) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def updateDatas(self, table_name: str, data: List[Dict[str, str]], condition: str, encrypt_columns: List[str] = None) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def selectData(self, table_name: str, columns: List[str], condition: str = None, dencrypt_columns: List[str] = None) -> List[Dict[str, str]]:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")
+
+        def deleteData(self, table_name: str, condition: str) -> bool:
+            raise NotImplementedError(f"MySQLiteDatabase is not available. Please install mysql-connector-python package.")

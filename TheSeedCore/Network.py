@@ -4,22 +4,29 @@ from __future__ import annotations
 __all__ = [
     "WebSocketServer",
     "WebSocketClient",
-    "HTTPServer"
+    "HTTPServer",
+    "AsyncFlask"
 ]
 
 import asyncio
 import json
+import multiprocessing
 import socket
 import ssl
-from typing import TYPE_CHECKING, Callable, Coroutine, Any, Optional, Literal
+import threading
+from typing import TYPE_CHECKING, Callable, Coroutine, Any, Optional, Literal, Dict
 
+from . import FlaskServerStaticFolderPath, FlaskServerTemplateFolderPath, FlaskServerInstanceFolderPath, FlaskServerRootFolderPath, DevelopmentEnv
 from .InstanceManager import NetworkInstanceManager
 from .Logger import consoleLogger
+from ._Common import _checkPackage  # noqa
 
 if TYPE_CHECKING:
     pass
 
 _DefaultLogger = consoleLogger("Network")
+
+# Define the WebSocketServer and WebSocketClient classes
 try:
     # noinspection PyUnresolvedReferences
     import certifi
@@ -593,11 +600,67 @@ except ImportError as _:
         def __init__(self, *args, **kwargs):
             _DefaultLogger.warning("WebSocketServer is not available. Please install certifi and websockets package.")
 
+        @property
+        def name(self) -> str:
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        @property
+        def host(self) -> str:
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        @property
+        def port(self) -> str:
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        @property
+        def server_address(self) -> str:
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        @property
+        def all_clients(self) -> dict:
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        def setMsgProcessor(self, processor: Callable[..., Coroutine[Any, Any, Any]]):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        def setWsProcessor(self, processor: Callable[..., Coroutine[Any, Any, Any]]):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        async def startWebSocketServer(self):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        async def stopWebSocketServer(self):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        async def sendMsg(self, client_id, message):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
+        async def broadcast(self, message):
+            raise NotImplementedError("WebSocketServer is not available. Please install certifi and websockets package.")
+
 
     class WebSocketClient:
         # noinspection PyUnusedLocal
         def __init__(self, *args, **kwargs):
             _DefaultLogger.warning("WebSocketClient is not available. Please install certifi and websockets package.")
+
+        @property
+        def client_id(self):
+            raise ImportError("WebSocketClient is not available. Please install certifi and websockets package.")
+
+        def setReceiveProcessor(self, processor: Callable[..., Coroutine[Any, Any, Any]]):
+            raise ImportError("WebSocketClient is not available. Please install certifi and websockets package.")
+
+        async def connect(self):
+            raise ImportError("WebSocketClient is not available. Please install certifi and websockets package.")
+
+        async def disconnect(self):
+            raise ImportError("WebSocketClient is not available. Please install certifi and websockets package.")
+
+        async def sendMsg(self, msg):
+            raise ImportError("WebSocketClient is not available. Please install certifi and websockets package.")
+
+# Define the HTTPServer class
 try:
     # noinspection PyUnresolvedReferences
     from aiohttp import web
@@ -711,40 +774,6 @@ try:
 
             self._HTTPApplication.router.add_route(method, path, processor)
 
-        # noinspection PyUnusedLocal
-        @staticmethod
-        async def _homeRequest(request) -> web.Response:
-            """
-            Handles the home request and responds with an HTML page displaying the application title and ASCII art.
-
-            This static asynchronous method serves as the entry point for the home page of the application.
-            When a request is made to the home endpoint, it returns a simple HTML response containing a title and a styled ASCII art banner.
-
-            :param request: The incoming HTTP request object.
-            :return: A web.Response containing the HTML content.
-            :raise: None
-
-            setup:
-                1. Define the HTML content for the response, including the title and ASCII art.
-                2. Return the HTML content as a web.Response object with the appropriate content type.
-            """
-
-            html_content = """
-                    <html>
-                    <head><title>TheSeedCore</title></head>
-                    <body style="text-align:center; padding-top:50px;">
-                    <pre style="color:black;">
-                     _       __          __                                     __            ______  __           _____                   __   ______                        
-                    | |     / /  ___    / /  _____  ____    ____ ___   ___     / /_  ____    /_  __/ / /_   ___   / ___/  ___   ___   ____/ /  / ____/  ____    _____  ___    
-                    | | /| / /  / _ \  / /  / ___/ / __ \  / __ `__ \ / _ \   / __/ / __ \    / /   / __ \ / _ \  \__ \  / _ \ / _ \ / __  /  / /      / __ \  / ___/ / _ \   
-                    | |/ |/ /  /  __/ / /  / /__  / /_/ / / / / / / //  __/  / /_  / /_/ /   / /   / / / //  __/ ___/ / /  __//  __// /_/ /  / /___   / /_/ / / /    /  __/   
-                    |__/|__/   \___/ /_/   \___/  \____/ /_/ /_/ /_/ \___/   \__/  \____/   /_/   /_/ /_/ \___/ /____/  \___/ \___/ \__,_/   \____/   \____/ /_/     \___/    
-                    </pre>
-                    </body>
-                    </html>
-                    """
-            return web.Response(text=html_content, content_type="text/html")
-
         async def setAddress(self, host: str, port: str):
             """
             Sets the host and port for the HTTP server and restarts the server.
@@ -831,6 +860,40 @@ try:
             _DefaultLogger.debug(f"HTTPServer [{self._Name}] turned off.")
             self.IsClosed = True
 
+        # noinspection PyUnusedLocal
+        @staticmethod
+        async def _homeRequest(request) -> web.Response:
+            """
+            Handles the home request and responds with an HTML page displaying the application title and ASCII art.
+
+            This static asynchronous method serves as the entry point for the home page of the application.
+            When a request is made to the home endpoint, it returns a simple HTML response containing a title and a styled ASCII art banner.
+
+            :param request: The incoming HTTP request object.
+            :return: A web.Response containing the HTML content.
+            :raise: None
+
+            setup:
+                1. Define the HTML content for the response, including the title and ASCII art.
+                2. Return the HTML content as a web.Response object with the appropriate content type.
+            """
+
+            html_content = """
+                    <html>
+                    <head><title>TheSeedCore</title></head>
+                    <body style="text-align:center; padding-top:50px;">
+                    <pre style="color:black;">
+                     _       __          __                                     __            ______  __           _____                   __   ______                        
+                    | |     / /  ___    / /  _____  ____    ____ ___   ___     / /_  ____    /_  __/ / /_   ___   / ___/  ___   ___   ____/ /  / ____/  ____    _____  ___    
+                    | | /| / /  / _ \  / /  / ___/ / __ \  / __ `__ \ / _ \   / __/ / __ \    / /   / __ \ / _ \  \__ \  / _ \ / _ \ / __  /  / /      / __ \  / ___/ / _ \   
+                    | |/ |/ /  /  __/ / /  / /__  / /_/ / / / / / / //  __/  / /_  / /_/ /   / /   / / / //  __/ ___/ / /  __//  __// /_/ /  / /___   / /_/ / / /    /  __/   
+                    |__/|__/   \___/ /_/   \___/  \____/ /_/ /_/ /_/ \___/   \__/  \____/   /_/   /_/ /_/ \___/ /____/  \___/ \___/ \__,_/   \____/   \____/ /_/     \___/    
+                    </pre>
+                    </body>
+                    </html>
+                    """
+            return web.Response(text=html_content, content_type="text/html")
+
         async def _addressChangedHandler(self, request) -> web.Response:
             """
             Handles changes to the server's address based on client requests.
@@ -863,3 +926,234 @@ except ImportError as _:
         # noinspection PyUnusedLocal
         def __init__(self, *args, **kwargs):
             _DefaultLogger.warning("HTTPServer is not available. Please install aiohttp package.")
+
+        @property
+        def name(self):
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        @property
+        def host(self) -> str:
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        @property
+        def port(self) -> str:
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        @property
+        def server_address(self) -> str:
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        def checkRoute(self, method: Literal["POST", "GET"], path: str) -> bool:
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        def addRoute(self, method: Literal["POST", "GET"], path: str, processor: Callable[..., Coroutine[Any, Any, Any]]):
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        async def setAddress(self, host: str, port: str):
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        async def startHTTPServer(self):
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+        async def stopHTTPServer(self):
+            raise NotImplementedError("HTTPServer is not available. Please install aiohttp package.")
+
+# Define the AsyncFlask class
+try:
+    from flask import Flask, redirect
+
+
+    class AsyncFlask(threading.Thread):
+        """
+        AsyncFlask is a subclass of threading.Thread designed to run a Flask server asynchronously with multi-threading support.
+
+        Attributes:
+            _Name: The name of the Flask server instance.
+            _Host: The host on which the server will run.
+            _Port: The port on which the server will run.
+            _DevelopmentEnv: A flag indicating whether the server runs in development environment.
+            _ServerOptions: A dictionary of options for Flask server configuration.
+            _WaitressOptions: A dictionary of options for the Waitress WSGI server configuration.
+            _Debug: A flag indicating whether debugging is enabled for Flask.
+            Application: The Flask application instance.
+
+        Methods:
+            addRoute: A placeholder method for defining custom routes. Override this method to define routes.
+            setDevelopmentEnv: Sets the development environment mode for the server.
+            run: Starts the Flask server, using either Flask's built-in server (in development mode) or Waitress (in production mode).
+            _defaultRoute: Defines a default route `/TheSeedCore` that redirects to a specific URL.
+            _validateOptions: Validates server options, filtering out invalid configurations.
+        """
+
+        def __new__(cls, *args, **kwargs):
+            if multiprocessing.current_process().name != "MainProcess":
+                return None
+            return super().__new__(cls)
+
+        def __init__(self, name: str, host: str, port: int, **config):
+            super().__init__(name=name, daemon=True)
+            self._Name = name
+            self._Host = host
+            self._Port = port
+            self._DevelopmentEnv = DevelopmentEnv
+            self._ServerOptions = {k: v for k, v in config.items() if k in {
+                'load_dotenv', 'use_debugger', 'use_evalex', 'threaded', 'processes',
+                'passthrough_errors', 'ssl_context'
+            }}
+            self._WaitressOptions = {k: v for k, v in config.items() if k in {
+                'url_scheme', 'ident', 'threads', 'backlog', 'recv_bytes', 'send_bytes',
+                'outbuf_overflow', 'inbuf_overflow', 'connection_limit', 'cleanup_interval',
+                'channel_timeout', 'log_socket_errors', 'max_request_header_size', 'max_request_body_size',
+                'expose_tracebacks', 'asyncore_use_poll'
+            }}
+            self._Debug = config.get("debug", True)
+            self.Application = Flask(
+                name,
+                static_url_path=config.get("static_url_path", None),
+                static_folder=config.get("static_folder", FlaskServerStaticFolderPath),
+                static_host=config.get("static_host", None),
+                host_matching=config.get("host_matching", False),
+                subdomain_matching=config.get("subdomain_matching", False),
+                template_folder=config.get("template_folder", FlaskServerTemplateFolderPath),
+                instance_path=config.get("instance_path", FlaskServerInstanceFolderPath),
+                instance_relative_config=config.get("instance_relative_config", False),
+                root_path=config.get("root_path", FlaskServerRootFolderPath),
+            )
+            self._defaultRoute()
+            self.addRoute()
+            if config.get("quick_start", False):
+                self.start()
+
+        def addRoute(self):
+            """
+            This method is responsible for defining the routes of the Flask server.
+
+            You can inherit the FlaskServer class and override this method to define routes.
+
+            :return: None
+            :raises: None
+            """
+
+            _DefaultLogger.warning(f"FlaskServer[{self._Name}] does not have any routes defined.")
+
+        def setDevelopmentEnv(self, status: bool):
+            """
+            Sets the development environment status for the Flask server.
+
+            This method is used to enable or disable the development environment mode for the server.
+            When `status` is `True`, the development environment is activated; otherwise, it is deactivated.
+
+            :param status: A boolean value indicating whether to enable (True) or disable (False) the development environment.
+            :return: None
+            :raises: None
+            setup:
+                1. Sets the `_DevelopmentEnv` attribute of the server instance.
+            """
+
+            self._DevelopmentEnv = status
+
+        def run(self):
+            """
+            Runs the Flask server with the configured options for development or production environments.
+
+            This method is responsible for starting the Flask server with the appropriate configurations based on
+            whether the server is running in a development environment or a production environment. If the
+            environment is development, it uses Flask's built-in server; otherwise, it attempts to use the Waitress
+            WSGI server if available.
+
+            The method validates the server options for Flask and Waitress, ensuring that only supported options
+            are passed to the respective server.
+
+            :return: None
+            :raises Exception: If there is an error while running the server, it is caught and logged.
+            setup:
+                1. Validates the server options for both Flask and Waitress servers.
+                2. Runs the Flask application either using Flask's built-in server (for development) or Waitress (for production).
+                3. Logs any errors encountered during the server startup process.
+            """
+
+            valid_flask_options = {
+                'load_dotenv', 'use_debugger', 'use_evalex', 'threaded', 'processes',
+                'passthrough_errors', 'ssl_context'
+            }
+
+            valid_waitress_options = {
+                'url_scheme', 'ident', 'threads', 'backlog', 'recv_bytes', 'send_bytes',
+                'outbuf_overflow', 'inbuf_overflow', 'connection_limit', 'cleanup_interval',
+                'channel_timeout', 'log_socket_errors', 'max_request_header_size',
+                'max_request_body_size', 'expose_tracebacks', 'asyncore_use_poll'
+            }
+            self._ServerOptions = self._validateOptions(self._ServerOptions, valid_flask_options, "Flask")
+            self._WaitressOptions = self._validateOptions(self._WaitressOptions, valid_waitress_options, "Waitress")
+
+            try:
+                if self._DevelopmentEnv:
+                    self.Application.run(host=self._Host, port=self._Port, debug=self._Debug, use_reloader=False, **self._ServerOptions)
+                elif _checkPackage("waitress"):
+                    from waitress import serve
+                    serve(self.Application, host=self._Host, port=self._Port, **self._WaitressOptions)
+                else:
+                    _DefaultLogger.warning(f"The current environment is a production environment, but AsyncFlask[{self._Name}] is running in a development environment.")
+                    self.Application.run(host=self._Host, port=self._Port, debug=self._Debug, use_reloader=False, **self._ServerOptions)
+            except Exception as e:
+                _DefaultLogger.error(f"AsyncFlask[{self._Name}] Runtime error: {e}", exc_info=True)
+
+        def _defaultRoute(self):
+            """
+            Defines a default route for the Flask application that redirects to a specified URL.
+
+            This method registers a route `/TheSeedCore` on the Flask application, and when accessed,
+            it performs an HTTP redirect to the provided URL (`https://ns-cloud-backend.site`).
+
+            This can be used as a simple health check or to direct users to a specified external page.
+
+            :return: The result of the Flask `redirect` function (HTTP redirect response).
+            :raises: None
+            setup:
+                1. Registers the `/TheSeedCore` route on the Flask application.
+                2. Redirects requests to `/TheSeedCore` to the specified external URL (`https://ns-cloud-backend.site`).
+            """
+
+            @self.Application.route("/TheSeedCore")
+            def _defaultRoute():
+                return redirect("https://ns-cloud-backend.site")
+
+        @staticmethod
+        def _validateOptions(options: Dict[str, str], valid_options: set[str], server_name: str):
+            """
+            Validates the provided server options by comparing them against a set of valid options.
+
+            This method checks whether each key in the `options` dictionary is part of the `valid_options` set.
+            If any invalid options are found, they are logged as warnings and excluded from the final options dictionary.
+
+            :param options: A dictionary of options to be validated.
+                - keys are the option names (str), and values are the option values (str).
+            :param valid_options: A set of valid option names (str) that are acceptable for the server.
+            :param server_name: The name of the server (str) for logging purposes.
+            :return: A dictionary containing only the valid options from the `options` parameter.
+            :raises: None
+            setup:
+                1. Iterates over the `options` dictionary to identify invalid options.
+                2. Logs a warning for each invalid option.
+                3. Returns a new dictionary with only the valid options.
+            """
+
+            invalid_options = [k for k in options if k not in valid_options]
+            if invalid_options:
+                _DefaultLogger.warning(f"{server_name} ignored invalid options: {invalid_options}")
+            return {k: v for k, v in options.items() if k in valid_options}
+except ImportError as _:
+    class AsyncFlask:
+        # noinspection PyUnusedLocal
+        def __init__(self, *args, **kwargs):
+            _DefaultLogger.warning("AsyncFlask is not available. Please install flask package.")
+            self.Application = None
+
+        def addRoute(self):
+            raise NotImplementedError("Flask is not available. Please install flask package.")
+
+        def setDevelopmentEnv(self, status: bool):
+            raise NotImplementedError("Flask is not available. Please install flask package.")
+
+        def start(self):
+            raise NotImplementedError("Flask is not available. Please install flask package.")
