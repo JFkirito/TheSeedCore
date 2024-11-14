@@ -41,7 +41,7 @@ class TextColor(Enum):
     CYAN_BOLD: str = "\033[1m\033[36m"
     WHITE_BOLD: str = "\033[1m\033[37m"
 
-    def apply(self, text) -> str:
+    def apply(self, text: str) -> str:
         return f"{self.value}{text}{TextColor.RESET.value}"
 
 

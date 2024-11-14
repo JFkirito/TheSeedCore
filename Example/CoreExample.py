@@ -56,7 +56,7 @@ async def main_function():
 
 
 if __name__ == "__main__":
-    TSC.ConnectTheSeedCore(check_env=False, MainPriority=TSC.Priority.HIGH, CoreProcessCount=4, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink, PerformanceReport=True)
+    TSC.ConnectTheSeedCore(check_env=False, MainPriority=TSC.Priority.HIGH, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink, PerformanceReport=True)
     TSC.MainEventLoop().create_task(main_function())
     TSC.MainEventLoop().create_task(countdown())
     TSC.LinkStart()

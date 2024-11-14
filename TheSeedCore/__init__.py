@@ -2,15 +2,21 @@
 from __future__ import annotations
 
 __all__ = [
-    # __init__
-    "SystemType",
-    "DevelopmentEnv",
+    # Path
     "RootDirectoryPath",
     "ExternalLibraryDirectoryPath",
     "ExternalServiceDirectoryPath",
     "DataDirectoryPath",
     "DatabaseDirectoryPath",
+    "FlaskDataDirectoryPath",
+    "FlaskStaticFolderPath",
+    "FlaskTemplateFolderPath",
+    "FlaskInstanceFolderPath",
+    "FlaskRootFolderPath",
     "LogsDirectoryPath",
+    # __init__
+    "SystemType",
+    "DevelopmentEnv",
     "ConnectTheSeedCore",
     "MainEventLoop",
     "AsyncTask",
@@ -26,13 +32,13 @@ __all__ = [
     "ExpandPolicy",
     "ShrinkagePolicy",
     "TaskFuture",
-    "serviceProcessID",
+    "_serviceProcessID",
     "submitAsyncTask",
     "submitProcessTask",
     "submitThreadTask",
     "submitSystemProcessTask",
     "submitSystemThreadTask",
-    "closeConcurrentSystem",
+    "_closeConcurrentSystem",
     # Database
     "SQLiteDatabase",
     "MySQLDatabase",
@@ -48,6 +54,7 @@ __all__ = [
     "WebSocketClient",
     "HTTPServer",
     "AsyncFlask",
+    "AsyncFastAPI",
     # Security
     "AESEncryptor",
     "RSAEncryptor"
@@ -62,7 +69,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack, Callable
 if TYPE_CHECKING:
     pass
 
-__version__: str = "0.1.4"
+__version__: str = "0.1.5"
 __author__: str = "B站疾风Kirito"
 __website__: str = "https://space.bilibili.com/6440741"
 __repository__: str = "https://github.com/JFkirito/TheSeedCore"
@@ -75,19 +82,20 @@ ExternalLibraryDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCore
 ExternalServiceDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreExternalService")
 DataDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreData")
 DatabaseDirectoryPath: str = os.path.join(DataDirectoryPath, "Database")
-FlaskServerDataDirectoryPath: str = os.path.join(DataDirectoryPath, "FlaskServer")
-FlaskServerStaticFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Static")
-FlaskServerTemplateFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Templates")
-FlaskServerInstanceFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Instance")
-FlaskServerRootFolderPath: str = os.path.join(FlaskServerDataDirectoryPath, "Root")
+FlaskDataDirectoryPath: str = os.path.join(DataDirectoryPath, "Flask")
+FlaskStaticFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Static")
+FlaskTemplateFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Templates")
+FlaskInstanceFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Instance")
+FlaskRootFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Root")
 LogsDirectoryPath: str = os.path.join(DataDirectoryPath, "Logs")
 
 _MainEventLoop: Optional[asyncio.AbstractEventLoop] = None
 _QtMode: bool = False
+_Connected: bool = False
 
 from ._Common import _checkPath, _checkPackageVersion, _checkPackage, _createPath, _addSystemPath  # noqa
 from ._Common import *
-from .Concurrent import _PySide6Support, _PyQt6Support, _PyQt5Support, _PyTorchSupport, _ConnectConcurrentSystem  # noqa
+from .Concurrent import _PySide6Support, _PyQt6Support, _PyQt5Support, _PyTorchSupport, _ConnectConcurrentSystem, _serviceProcessID, _closeConcurrentSystem  # noqa
 from .Concurrent import *
 from .Database import *
 from .InstanceManager import *
@@ -100,11 +108,11 @@ _checkPath(
     ExternalServiceDirectoryPath,
     DataDirectoryPath,
     DatabaseDirectoryPath,
-    FlaskServerDataDirectoryPath,
-    FlaskServerStaticFolderPath,
-    FlaskServerTemplateFolderPath,
-    FlaskServerInstanceFolderPath,
-    FlaskServerRootFolderPath,
+    FlaskDataDirectoryPath,
+    FlaskStaticFolderPath,
+    FlaskTemplateFolderPath,
+    FlaskInstanceFolderPath,
+    FlaskRootFolderPath,
     LogsDirectoryPath
 )
 
@@ -277,7 +285,7 @@ def _createMainEventLoop(**config: Unpack[_TheSeedCoreConfig]) -> asyncio.Abstra
         if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0", ">="):
             from PySide6.QtAsyncio import QAsyncioEventLoopPolicy
             default_event_loop_policy = asyncio.get_event_loop_policy()
-            asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("quit_qapp", True), handle_sigint=config.get("handle_sigint", False)))
+            asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("quit_qapp", True), handle_sigint=config.get("handle_sigint", True)))
             main_event_loop = asyncio.get_event_loop()
             asyncio.set_event_loop_policy(default_event_loop_policy)
             _QtMode = True
@@ -390,7 +398,8 @@ def _showBanner(service_process_id: int):
     print(TextColor.PURPLE_BOLD.value + "                                                                                 " + TextColor.RESET.value)
     print(TextColor.PURPLE_BOLD.value + f"\nTheSeedCore version: {__version__}" + TextColor.RESET.value)
     print(TextColor.PURPLE_BOLD.value + f"MainProcess ID - [{os.getpid()}]" + TextColor.RESET.value)
-    print(TextColor.PURPLE_BOLD.value + f"ServiceProcess ID - [{service_process_id}]" + TextColor.RESET.value)
+    if service_process_id != 0:
+        print(TextColor.PURPLE_BOLD.value + f"ServiceProcess ID - [{service_process_id}]" + TextColor.RESET.value)
     print(TextColor.PURPLE_BOLD.value + f"Latest repositories address {__repository__}" + TextColor.RESET.value)
 
 
@@ -442,7 +451,9 @@ def MainEventLoop() -> asyncio.AbstractEventLoop:
     :raise: Raises a NameError if the global main event loop variable is not defined.
     """
 
-    global _MainEventLoop
+    global _MainEventLoop, _Connected
+    if not _Connected:
+        raise RuntimeError("TheSeedCore is not connected.")
     return _MainEventLoop
 
 
@@ -538,37 +549,38 @@ def ThreadTask(priority=0, callback=None, future=None) -> Callable:
 
 def ConnectTheSeedCore(**config: Unpack[_TheSeedCoreConfig]):
     """
-    Establishes a connection to the TheSeedCore system using the provided configuration.
+    Connects the core system components, initializes the event loop, and sets up concurrency.
 
-    This function initializes the main event loop and connects the concurrent system.
-    If the 'check_env' parameter is set to True in the configuration, it will display
-    support information for the current environment. It also displays a banner
-    with the service process ID after establishing the connection.
-
-    :param config: Keyword arguments representing configuration options for connecting to TheSeedCore.
+    :param config: A variable-length argument dictionary of configuration options for initializing the system.
     :return: None
-    :raise: Raises exceptions related to the event loop creation or connection processes.
-
+    :raise: None
     setup:
-        1. Create the main event loop with the provided configuration.
-        2. Optionally display environment support information based on configuration.
-        3. Connect the concurrent system to the main event loop.
-        4. Show a banner displaying the service process ID.
+        1. Creates the main event loop using the provided configuration.
+        2. If 'check_env' is True in the config and the environment is not DevelopmentEnv, displays support information.
+        3. If CoreProcessCount or CoreThreadCount is not zero in the config, sets up the concurrent system using _ConnectConcurrentSystem.
+        4. Displays a banner showing the service process ID.
+        5. Initiates the connection to stop the link with _connectLinkStop.
+
+    Note:
+        - The function checks the environment settings and displays information about system requirements if needed.
+        - The function also sets up the concurrent processing system if the configuration indicates a need for core processes or threads.
+        - System components like the event loop and the service process banner are initialized as part of the setup.
     """
 
-    global _MainEventLoop
+    global _MainEventLoop, DevelopmentEnv, _Connected
     _MainEventLoop = _createMainEventLoop(**config)
-    if config.get("check_env", False):
+    if config.get("check_env", False) and DevelopmentEnv:
         _showSupportInfo(_QtMode)
-    _ConnectConcurrentSystem(_MainEventLoop, **config)
-    _showBanner(serviceProcessID())
+    if config.get("CoreProcessCount", None) != 0 or config.get("CoreThreadCount", None) != 0:
+        _ConnectConcurrentSystem(_MainEventLoop, **config)
+    _showBanner(_serviceProcessID())
     _connectLinkStop()
+    _Connected = True
 
 
 def LinkStart():
     """
-    Starts the main event loop for the application and indicates that the system
-    is ready for operations.
+    Starts the main event loop for the application and indicates that the system is ready for operations.
 
     This function prints a message to the console indicating that the connection
     has been established and the system is now standing by. It then enters an
@@ -584,7 +596,11 @@ def LinkStart():
 
     global _MainEventLoop
     print(TextColor.GREEN_BOLD.value + f"TheSeedCore connection completed. System standing by...\n" + TextColor.RESET.value)
-    _MainEventLoop.run_forever()
+    try:
+        _MainEventLoop.run_forever()
+        sys.exit()
+    except (BrokenPipeError, EOFError, KeyboardInterrupt, Exception):
+        pass
 
 
 def LinkStop():
@@ -604,6 +620,6 @@ def LinkStop():
     """
 
     _cleanupNetworkService()
-    closeConcurrentSystem()
+    _closeConcurrentSystem()
     if not _QtMode:
         _MainEventLoop.stop()

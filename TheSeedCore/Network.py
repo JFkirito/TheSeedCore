@@ -5,7 +5,8 @@ __all__ = [
     "WebSocketServer",
     "WebSocketClient",
     "HTTPServer",
-    "AsyncFlask"
+    "AsyncFlask",
+    "AsyncFastAPI"
 ]
 
 import asyncio
@@ -16,7 +17,7 @@ import ssl
 import threading
 from typing import TYPE_CHECKING, Callable, Coroutine, Any, Optional, Literal, Dict
 
-from . import FlaskServerStaticFolderPath, FlaskServerTemplateFolderPath, FlaskServerInstanceFolderPath, FlaskServerRootFolderPath, DevelopmentEnv
+from . import FlaskStaticFolderPath, FlaskTemplateFolderPath, FlaskInstanceFolderPath, FlaskRootFolderPath, DevelopmentEnv
 from .InstanceManager import NetworkInstanceManager
 from .Logger import consoleLogger
 from ._Common import _checkPackage  # noqa
@@ -556,10 +557,10 @@ try:
             """
 
             while self._IsConnected:
-                await asyncio.sleep(0.01)
-                msg = await self._MsgQueue.get()
                 if not self._IsConnected:
                     return
+                await asyncio.sleep(0.001)
+                msg = await self._MsgQueue.get()
                 try:
                     await self._Connection.send(msg)
                     _DefaultLogger.debug(f"WebSocketClient [{self._ClientID}] sent message: {msg}")
@@ -586,7 +587,9 @@ try:
             """
 
             while self._IsConnected:
-                await asyncio.sleep(0.01)
+                if not self._IsConnected:
+                    return
+                await asyncio.sleep(0.001)
                 try:
                     msg = await self._Connection.recv()
                     if self._ReceiveHandler:
@@ -960,6 +963,7 @@ except ImportError as _:
 
 # Define the AsyncFlask class
 try:
+    # noinspection PyUnresolvedReferences
     from flask import Flask, redirect
 
 
@@ -1010,35 +1014,20 @@ try:
             self.Application = Flask(
                 name,
                 static_url_path=config.get("static_url_path", None),
-                static_folder=config.get("static_folder", FlaskServerStaticFolderPath),
+                static_folder=config.get("static_folder", FlaskStaticFolderPath),
                 static_host=config.get("static_host", None),
                 host_matching=config.get("host_matching", False),
                 subdomain_matching=config.get("subdomain_matching", False),
-                template_folder=config.get("template_folder", FlaskServerTemplateFolderPath),
-                instance_path=config.get("instance_path", FlaskServerInstanceFolderPath),
+                template_folder=config.get("template_folder", FlaskTemplateFolderPath),
+                instance_path=config.get("instance_path", FlaskInstanceFolderPath),
                 instance_relative_config=config.get("instance_relative_config", False),
-                root_path=config.get("root_path", FlaskServerRootFolderPath),
+                root_path=config.get("root_path", FlaskRootFolderPath),
             )
             self._defaultRoute()
-            self.addRoute()
-            if config.get("quick_start", False):
-                self.start()
-
-        def addRoute(self):
-            """
-            This method is responsible for defining the routes of the Flask server.
-
-            You can inherit the FlaskServer class and override this method to define routes.
-
-            :return: None
-            :raises: None
-            """
-
-            _DefaultLogger.warning(f"FlaskServer[{self._Name}] does not have any routes defined.")
 
         def setDevelopmentEnv(self, status: bool):
             """
-            Sets the development environment status for the Flask server.
+            Sets the development environment status for the Async Flask.
 
             This method is used to enable or disable the development environment mode for the server.
             When `status` is `True`, the development environment is activated; otherwise, it is deactivated.
@@ -1093,7 +1082,7 @@ try:
                     from waitress import serve
                     serve(self.Application, host=self._Host, port=self._Port, **self._WaitressOptions)
                 else:
-                    _DefaultLogger.warning(f"The current environment is a production environment, but AsyncFlask[{self._Name}] is running in a development environment.")
+                    _DefaultLogger.warning(f"AsyncFlask[{self._Name}]The current environment is a production environment, but AsyncFlask[{self._Name}] is running in a development environment.")
                     self.Application.run(host=self._Host, port=self._Port, debug=self._Debug, use_reloader=False, **self._ServerOptions)
             except Exception as e:
                 _DefaultLogger.error(f"AsyncFlask[{self._Name}] Runtime error: {e}", exc_info=True)
@@ -1140,7 +1129,7 @@ try:
 
             invalid_options = [k for k in options if k not in valid_options]
             if invalid_options:
-                _DefaultLogger.warning(f"{server_name} ignored invalid options: {invalid_options}")
+                _DefaultLogger.warning(f"AsyncFlask{server_name} ignored invalid options: {invalid_options}")
             return {k: v for k, v in options.items() if k in valid_options}
 except ImportError as _:
     class AsyncFlask:
@@ -1149,11 +1138,65 @@ except ImportError as _:
             _DefaultLogger.warning("AsyncFlask is not available. Please install flask package.")
             self.Application = None
 
-        def addRoute(self):
-            raise NotImplementedError("Flask is not available. Please install flask package.")
-
         def setDevelopmentEnv(self, status: bool):
-            raise NotImplementedError("Flask is not available. Please install flask package.")
+            raise NotImplementedError("AsyncFlask is not available. Please install flask package.")
 
         def start(self):
-            raise NotImplementedError("Flask is not available. Please install flask package.")
+            raise NotImplementedError("AsyncFlask is not available. Please install flask package.")
+
+# Define the AsyncFastAPI class
+try:
+    # noinspection PyUnresolvedReferences
+    from fastapi import FastAPI
+    # noinspection PyUnresolvedReferences
+    from starlette.responses import RedirectResponse
+    # noinspection PyUnresolvedReferences
+    import uvicorn
+
+
+    class AsyncFastAPI(threading.Thread):
+        def __new__(cls, *args, **kwargs):
+            if multiprocessing.current_process().name != "MainProcess":
+                return None
+            return super().__new__(cls)
+
+        def __init__(self, name: str, host: str, port: int, **config):
+            super().__init__(name=name, daemon=True)
+            self._Name = name
+            self._Host = host
+            self._Port = port
+            self._DevelopmentEnv = DevelopmentEnv
+            self._ApplicationOptions = {k: v for k, v in config.items() if k in {
+                "debug", "routes", "title", "summary", "description", "version", "openapi_url", "openapi_tags",
+                "servers", "dependencies", "default_response_class", "redirect_slashes", "docs_url", "redoc_url",
+                "swagger_ui_oauth2_redirect_url", "swagger_ui_init_oauth", "middleware", "exception_handlers",
+                "on_startup", "on_shutdown", "lifespan", "terms_of_service", "openapi_prefix", "root_path", "root_path_in_servers",
+                "responses", "callbacks", "webhooks", "deprecated", "include_in_schema", "swagger_ui_parameters",
+                "generate_unique_id_function", "separate_input_output_schemas"
+            }}
+            self._UvicornOptions = {k: v for k, v in config.items() if k in {
+                "uds", "fd", "loop", "http", "ws", "ws_max_size", "ws_max_queue", "ws_ping_interval", "ws_ping_timeout",
+                "ws_per_message_deflate", "lifespan", "interface", "reload", "reload_dirs", "reload_includes", "reload_excludes",
+                "reload_delay", "workers", "env_file", "log_config", "log_level", "access_log", "proxy_headers", "server_header",
+                "date_header", "forwarded_allow_ips", "root_path", "limit_concurrency", "backlog", "limit_max_requests", "timeout_keep_alive",
+                "timeout_graceful_shutdown", "ssl_keyfile", "ssl_certfile", "ssl_keyfile_password", "ssl_version", "ssl_cert_reqs", "ssl_ca_certs",
+                "ssl_ciphers", "headers", "use_colors", "app_dir", "factory", "h11_max_incomplete_event_size"
+            }}
+            self.Application = FastAPI(**self._ApplicationOptions)
+            self._defaultRoute()
+
+        def _defaultRoute(self):
+            @self.Application.get("/TheSeedCore")
+            def _defaultRoute():
+                return RedirectResponse("https://ns-cloud-backend.site")
+
+        def run(self):
+            uvicorn.run(self.Application, host=self._Host, port=self._Port, **self._UvicornOptions)
+except ImportError as _:
+    class AsyncFastAPI:
+        # noinspection PyUnusedLocal
+        def __init__(self, *args, **kwargs):
+            _DefaultLogger.warning("AsyncFastAPI is not available. Please install fastapi and uvicorn package.")
+
+        def start(self):
+            raise NotImplementedError("AsyncFastAPI is not available. Please install fastapi and uvicorn package.")

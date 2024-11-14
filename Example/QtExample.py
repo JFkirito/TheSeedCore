@@ -75,7 +75,7 @@ class TestWidget(QWidget):
     @TSC.AsyncTask()
     async def _start_thread_test(self):
         start_time = time.time()
-        for i in range(100):
+        for i in range(1):
             TSC.submitThreadTask(self.thread_test_function, callback=self.thread_test_callback, start_time=start_time)
 
     @staticmethod
@@ -93,16 +93,6 @@ class TestWidget(QWidget):
         """ 测试方法，可以是异步任务也可以是同步任务 """
         current_time = time.time()
         await asyncio.sleep(2)
-        execution_time = time.time() - current_time
-        return current_time - start_time, start_time, execution_time
-
-    # noinspection PyUnresolvedReferences
-    @staticmethod
-    def process_gpu_test_function(start_time: float):
-        current_time = time.time()
-        x = torch.randn(3000, 3000).cuda()
-        y = torch.randn(3000, 3000).cuda()
-        result = torch.matmul(x, y)
         execution_time = time.time() - current_time
         return current_time - start_time, start_time, execution_time
 
@@ -133,7 +123,7 @@ class TestWidget(QWidget):
 
 if __name__ == "__main__":
     qt = QApplication(sys.argv)
-    TSC.ConnectTheSeedCore(check_env=True, MainPriority=TSC.Priority.HIGH, CoreProcessCount=4, CoreThreadCount=4, ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink)
+    TSC.ConnectTheSeedCore(ExpandPolicy=TSC.ExpandPolicy.AutoExpand, ShrinkagePolicy=TSC.ShrinkagePolicy.AutoShrink)
     w = TestWidget()
     w.show()
     TSC.LinkStart()

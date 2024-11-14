@@ -363,6 +363,7 @@ class SQLiteDatabase:
                 self._Connection.commit()
                 cursor.close()
                 return True
+            _DefaultLogger.warning(f"SQLite database [{self._Name}] table {table_name} not exists.")
             return False
         except sqlite3.Error as e:
             self._Connection.rollback()

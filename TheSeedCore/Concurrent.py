@@ -6,13 +6,11 @@ __all__ = [
     "ExpandPolicy",
     "ShrinkagePolicy",
     "TaskFuture",
-    "serviceProcessID",
     "submitAsyncTask",
     "submitProcessTask",
     "submitThreadTask",
     "submitSystemProcessTask",
     "submitSystemThreadTask",
-    "closeConcurrentSystem"
 ]
 
 import asyncio
@@ -29,6 +27,7 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError, ProcessPoolEx
 from enum import Enum
 from typing import TYPE_CHECKING, Union, Optional, Dict, Tuple, Any, Literal, List, TypedDict, Unpack, Callable, Coroutine
 
+from . import DevelopmentEnv
 from .Logger import TheSeedCoreLogger, consoleLogger
 from ._Common import _checkPackage, PerformanceMonitor, TextColor  # noqa
 
@@ -110,46 +109,41 @@ class ShrinkagePolicy(str, Enum):
 
 
 class TaskFuture:
-    def __init__(self):
-        self._TaskID: Optional[str] = None
+    def __init__(self, task_id: str):
+        self._TaskID: Optional[str] = task_id
 
     @property
     def taskID(self):
         return self._TaskID
 
-    @taskID.setter
-    def taskID(self, id: str):
-        self._TaskID = id
-
-    def result(self, timeout: Optional[int] = None):
+    async def result(self, timeout: Optional[int] = None):
         """
-        Waits for the result of a task identified by its TaskID, with an optional timeout.
+        Asynchronously retrieves the result of a task, with optional timeout.
 
-        :param timeout: An optional integer specifying the maximum time to wait for the result (in seconds).
-        :return: The result of the task once it is available.
-        :raise TimeoutError: If the specified timeout is reached without the task result being available.
+        :param timeout: Optional timeout value in seconds. If None, it waits indefinitely.
+        :return: The result of the task once it's completed.
+        :raise: TimeoutError if the task takes longer than the specified timeout to complete.
         setup:
-            1. Record the start time to track the elapsed time.
-            2. Enter an infinite loop to check for the task result:
-                2.1. If the task ID is found in the _FutureResult dictionary:
-                    2.1.1. Retrieve the task result and remove it from the dictionary.
-                    2.1.2. Return the retrieved task result.
-                2.2. If no timeout is specified, continue to the next iteration.
-                2.3. Sleep briefly to yield control and avoid busy waiting.
-                2.4. Check if the elapsed time exceeds the specified timeout:
-                    2.4.1. If it does, raise a TimeoutError indicating that the task execution timed out.
+            1. Tracks the start time of the task.
+            2. Continuously checks if the task result is available in the _FutureResult dictionary.
+            3. If the result is found, it is returned, and the task entry is removed from _FutureResult.
+            4. If the timeout value is set, the function will raise a TimeoutError if the task hasn't completed within the timeout period.
+
+        Note:
+            - The function uses asyncio.sleep(0) to yield control and avoid blocking the event loop while waiting for the result.
+            - If the task result is not found within the given timeout, a TimeoutError is raised.
         """
 
         global _FutureResult
         _start_time = time.time()
         while True:
+            await asyncio.sleep(0)
             if self._TaskID in _FutureResult:
                 task_result: Any = _FutureResult[self._TaskID]
                 del _FutureResult[self._TaskID]
                 return task_result
             if timeout is None:
                 continue
-            time.sleep(0.001)
             if time.time() - _start_time >= timeout:
                 raise TimeoutError("Task execution timed out.")
 
@@ -533,9 +527,9 @@ class _ConfigManager:
         self.IdleCleanupThreshold = SharedObjectManager.Value("i", self._validateIdleCleanupThreshold(config.get("IdleCleanupThreshold", None)))
         self.TaskThreshold = SharedObjectManager.Value("i", self._validateTaskThreshold(config.get("TaskThreshold", None)))
         self.GlobalTaskThreshold = SharedObjectManager.Value("i", self._validateGlobalTaskThreshold(config.get("GlobalTaskThreshold", None)))
-        self.ProcessPriority = SharedObjectManager.Value("c", self._validateProcessPriority(config.get("ProcessPriority", Priority.NORMAL)))
-        self.ExpandPolicy = SharedObjectManager.Value("c", self._validateExpandPolicy(config.get("ExpandPolicy", ExpandPolicy.NoExpand)))
-        self.ShrinkagePolicy = SharedObjectManager.Value("c", self._validateShrinkagePolicy(config.get("ShrinkagePolicy", ShrinkagePolicy.NoShrink)))
+        self.ProcessPriority = SharedObjectManager.Value("c", self._validateProcessPriority(config.get("ProcessPriority", None)))
+        self.ExpandPolicy = SharedObjectManager.Value("c", self._validateExpandPolicy(config.get("ExpandPolicy", None)))
+        self.ShrinkagePolicy = SharedObjectManager.Value("c", self._validateShrinkagePolicy(config.get("ShrinkagePolicy", None)))
         self.ShrinkagePolicyTimeout = SharedObjectManager.Value("i", self._validateShrinkagePolicyTimeout(config.get("ShrinkagePolicyTimeout", None)))
         self.PerformanceReport = SharedObjectManager.Value("b", config.get("PerformanceReport", False))
 
@@ -552,7 +546,8 @@ class _ConfigManager:
         """
 
         if priority not in ["IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"]:
-            self.Logger.warning(f"Invalid priority level '{priority}'. Default value ['NORMAL'] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid priority level '{priority}'. Default value ['NORMAL'] has been used.")
             return "NORMAL"
         return priority
 
@@ -579,19 +574,23 @@ class _ConfigManager:
         if default_value <= 0:
             default_value = 1
         if core_process_count is None:
-            self.Logger.warning(f"Core process count not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core process count not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(core_process_count, int):
-            self.Logger.warning(f"Invalid type for core process count '{core_process_count}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for core process count '{core_process_count}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         if core_process_count < 0 or core_process_count > self.PhysicalCores:
-            self.Logger.warning(f"Core process count exceeds the range of 0 - {self.PhysicalCores}. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core process count exceeds the range of 0 - {self.PhysicalCores}. Default value [{default_value}] has been used.")
             return default_value
 
         if core_process_count == 0:
-            self.Logger.warning(f"Core process count set to 0, process pool will be unavailable")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core process count set to 0, process pool will be unavailable")
 
         return core_process_count
 
@@ -617,16 +616,23 @@ class _ConfigManager:
         if default_value <= 0:
             default_value: int = 1
         if core_thread_count is None:
-            self.Logger.warning(f"Core thread count not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core thread count not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(core_thread_count, int):
-            self.Logger.warning(f"Invalid type for core thread count '{core_thread_count}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for core thread count '{core_thread_count}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
-        if core_thread_count <= 0 or core_thread_count > self.PhysicalCores * 4:
-            self.Logger.warning(f"Core thread count exceeds the range of 1 - {self.PhysicalCores * 4}. Default value [{default_value}] has been used.")
+        if core_thread_count < 0 or core_thread_count > self.PhysicalCores * 4:
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core thread count exceeds the range of 1 - {self.PhysicalCores * 4}. Default value [{default_value}] has been used.")
             return default_value
+
+        if core_thread_count == 0:
+            if DevelopmentEnv:
+                self.Logger.warning(f"Core thread count set to 0, thread pool will be unavailable")
 
         return core_thread_count
 
@@ -653,15 +659,18 @@ class _ConfigManager:
         if self.CoreProcessCount.value == 0:
             return 0
         if maximum_process_count is None:
-            self.Logger.warning(f"Maximum process count not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Maximum process count not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(maximum_process_count, int):
-            self.Logger.warning(f"Invalid type for maximum process count '{maximum_process_count}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for maximum process count '{maximum_process_count}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         if maximum_process_count < self.CoreProcessCount.value or maximum_process_count > self.PhysicalCores:
-            self.Logger.warning(f"Maximum process count exceeds the range of {self.CoreProcessCount.value} - {self.PhysicalCores}. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Maximum process count exceeds the range of {self.CoreProcessCount.value} - {self.PhysicalCores}. Default value [{default_value}] has been used.")
             return default_value
 
         return maximum_process_count
@@ -685,15 +694,18 @@ class _ConfigManager:
 
         default_value: int = self.PhysicalCores * 4
         if maximum_thread_count is None:
-            self.Logger.warning(f"Maximum thread count not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Maximum thread count not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(maximum_thread_count, int):
-            self.Logger.warning(f"Invalid type for maximum thread count '{maximum_thread_count}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for maximum thread count '{maximum_thread_count}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         if maximum_thread_count < self.CoreThreadCount.value or maximum_thread_count > self.PhysicalCores * 4:
-            self.Logger.warning(f"Maximum thread count exceeds the range of {self.CoreThreadCount.value} - {self.PhysicalCores * 4}. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Maximum thread count exceeds the range of {self.CoreThreadCount.value} - {self.PhysicalCores * 4}. Default value [{default_value}] has been used.")
             return default_value
 
         return maximum_thread_count
@@ -715,11 +727,13 @@ class _ConfigManager:
 
         default_value: int = 60
         if idle_cleanup_threshold is None:
-            self.Logger.warning(f"Idle cleanup threshold not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Idle cleanup threshold not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(idle_cleanup_threshold, int):
-            self.Logger.warning(f"Invalid type for idle cleanup threshold '{idle_cleanup_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for idle cleanup threshold '{idle_cleanup_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         return idle_cleanup_threshold
@@ -741,11 +755,13 @@ class _ConfigManager:
 
         default_value: int = self._calculateTaskThreshold()
         if task_threshold is None:
-            self.Logger.warning(f"Task threshold not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Task threshold not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(task_threshold, int):
-            self.Logger.warning(f"Invalid type for task threshold '{task_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for task threshold '{task_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         return task_threshold
@@ -767,11 +783,13 @@ class _ConfigManager:
 
         default_value: int = (self.CoreProcessCount.value + self.CoreThreadCount.value) * self.TaskThreshold.value
         if global_task_threshold is None:
-            self.Logger.warning(f"Global task threshold not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Global task threshold not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(global_task_threshold, int):
-            self.Logger.warning(f"Invalid type for global task threshold '{global_task_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for global task threshold '{global_task_threshold}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         return global_task_threshold
@@ -783,25 +801,28 @@ class _ConfigManager:
         :param process_priority: A string representing the desired process priority (e.g., "IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME").
         :return: A string representing the validated process priority.
         setup:
-            1. Check if the provided process priority is valid:
-                1.1. If it is not one of the accepted values (None, "IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"), log a warning and return the default priority "NORMAL".
-            2. Check if the provided process priority is None:
-                2.1. If it is None, log a warning and return the default priority "NORMAL".
+            1. Check if the provided process priority is None:
+                1.1. If it is None, log a warning and return the default priority "NORMAL".
+            2. Check if the provided process priority is valid:
+                2.1. If it is not one of the accepted values ("IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"), log a warning and return the default priority "NORMAL".
             3. Check if the core process count equals the number of physical cores and if the priority is "HIGH" or "REALTIME":
                 3.1. If both conditions are met, log a warning and return the default priority "NORMAL".
             4. If the process priority is valid, return it as is.
         """
 
-        if process_priority not in [None, "IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"]:
-            self.Logger.warning(f"Invalid process priority '{process_priority}'. Default value ['NORMAL'] has been used.")
+        if process_priority is None:
+            if DevelopmentEnv:
+                self.Logger.warning("Process priority not set. Default value ['NORMAL'] has been used.")
             return "NORMAL"
 
-        if process_priority is None:
-            self.Logger.warning("Process priority not set. Default value ['NORMAL'] has been used.")
+        if process_priority not in ["IDLE", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"]:
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid process priority '{process_priority}'. Default value ['NORMAL'] has been used.")
             return "NORMAL"
 
         if self.CoreProcessCount.value == self.PhysicalCores and process_priority in ["HIGH", "REALTIME"]:
-            self.Logger.warning(f"Process priority {process_priority} is not recommended for all physical cores. Default value ['NORMAL'] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Process priority {process_priority} is not recommended for all physical cores. Default value ['NORMAL'] has been used.")
             return "NORMAL"
         return process_priority
 
@@ -812,19 +833,21 @@ class _ConfigManager:
         :param expand_policy: An ExpandPolicy representing the desired policy.
         :return: A string representing the validated expand policy.
         setup:
-            1. Check if the provided expand policy is valid:
-                1.1. If it is not one of the accepted values (None, "NoExpand", "AutoExpand", "BeforehandExpand"), log a warning and return the default policy "NoExpand".
-            2. Check if the provided expand policy is None:
-                2.1. If it is None, log a warning and return the default policy "NoExpand".
+            1. Check if the provided expand policy is None:
+                1.1. If it is None, log a warning and return the default policy "NoExpand".
+            2. Check if the provided expand policy is valid:
+                2.1. If it is not one of the accepted values (None, "NoExpand", "AutoExpand", "BeforehandExpand"), log a warning and return the default policy "NoExpand".
             3. If the expand policy is valid, return it as is.
         """
 
-        if expand_policy not in [None, "NoExpand", "AutoExpand", "BeforehandExpand"]:
-            self.Logger.warning(f"Invalid expand policy '{expand_policy}'. Default value ['NoExpand'] has been used.")
+        if expand_policy is None:
+            if DevelopmentEnv:
+                self.Logger.warning("Expand policy not set. Default value ['NoExpand'] has been used.")
             return "NoExpand"
 
-        if expand_policy is None:
-            self.Logger.warning("Expand policy not set. Default value ['NoExpand'] has been used.")
+        if expand_policy not in ["NoExpand", "AutoExpand", "BeforehandExpand"]:
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid expand policy '{expand_policy}'. Default value ['NoExpand'] has been used.")
             return "NoExpand"
 
         return expand_policy
@@ -836,19 +859,21 @@ class _ConfigManager:
         :param shrinkage_policy: A ShrinkagePolicy representing the desired policy.
         :return: A string representing the validated shrinkage policy.
         setup:
-            1. Check if the provided shrinkage policy is valid:
-                1.1. If it is not one of the accepted values (None, "NoShrink", "AutoShrink", "TimeoutShrink"), log a warning and return the default policy "NoShrink".
-            2. Check if the provided shrinkage policy is None:
-                2.1. If it is None, log a warning and return the default policy "NoShrink".
+            1. Check if the provided shrinkage policy is None:
+                1.1. If it is None, log a warning and return the default policy "NoShrink".
+            2. Check if the provided shrinkage policy is valid:
+                2.1. If it is not one of the accepted values ("NoShrink", "AutoShrink", "TimeoutShrink"), log a warning and return the default policy "NoShrink".
             3. If the shrinkage policy is valid, return it as is.
         """
 
-        if shrinkage_policy not in [None, "NoShrink", "AutoShrink", "TimeoutShrink"]:
-            self.Logger.warning(f"Invalid shrinkage policy '{shrinkage_policy}'. Default value ['NoShrink'] has been used.")
+        if shrinkage_policy is None:
+            if DevelopmentEnv:
+                self.Logger.warning("Shrinkage policy not set. Default value ['NoShrink'] has been used.")
             return "NoShrink"
 
-        if shrinkage_policy is None:
-            self.Logger.warning("Shrinkage policy not set. Default value ['NoShrink'] has been used.")
+        if shrinkage_policy not in ["NoShrink", "AutoShrink", "TimeoutShrink"]:
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid shrinkage policy '{shrinkage_policy}'. Default value ['NoShrink'] has been used.")
             return "NoShrink"
 
         return shrinkage_policy
@@ -870,11 +895,13 @@ class _ConfigManager:
 
         default_value: int = 5
         if shrinkage_policy_timeout is None:
-            self.Logger.warning(f"Shrinkage policy timeout not set. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Shrinkage policy timeout not set. Default value [{default_value}] has been used.")
             return default_value
 
         if not isinstance(shrinkage_policy_timeout, int):
-            self.Logger.warning(f"Invalid type for shrinkage policy timeout '{shrinkage_policy_timeout}'. Must be an integer. Default value [{default_value}] has been used.")
+            if DevelopmentEnv:
+                self.Logger.warning(f"Invalid type for shrinkage policy timeout '{shrinkage_policy_timeout}'. Must be an integer. Default value [{default_value}] has been used.")
             return default_value
 
         return shrinkage_policy_timeout
@@ -971,36 +998,20 @@ class _CallbackExecutor:
 
         global _CallbackObject, _FutureResult
         while not self.CloseEvent.is_set():
+            await asyncio.sleep(0.001)
             try:
                 callback_data: Tuple[Any, str] = self.StatusManager.ResultStorageQueue.get_nowait()
                 task_result, task_id = callback_data
                 _FutureResult[task_id] = task_result
                 if task_id in _CallbackObject:
                     callback_object = _CallbackObject[task_id]
-                    self.MainEventLoop.create_task(self.callbackExecutor((callback_object, task_result)))
+                    if asyncio.iscoroutinefunction(callback_object):
+                        await callback_object(task_result)
+                    else:
+                        callback_object(task_result)
                     del _CallbackObject[task_id]
             except queue.Empty:
-                await asyncio.sleep(0.001)
-
-    @staticmethod
-    async def callbackExecutor(callback_data: Tuple[callable, Any]) -> None:
-        """
-        Executes a callback function with the provided task result, handling both coroutine and regular functions.
-
-        :param callback_data: A tuple containing the callback function and the task result to be passed to it.
-        :return: None
-        setup:
-            1. Extract the callback function and task result from the callback_data tuple.
-            2. Check if the callback function is a coroutine:
-                2.1. If it is a coroutine function, await its execution with the task result.
-                2.2. If it is a regular function, call it directly with the task result.
-        """
-
-        callback_object, task_result = callback_data
-        if asyncio.iscoroutinefunction(callback_object):
-            await callback_object(task_result)
-            return
-        callback_object(task_result)
+                continue
 
 
 class _TaskObject:
@@ -1285,17 +1296,22 @@ class _ProcessObject(multiprocessing.Process):
 
     def run(self) -> None:
         """
-        Runs the process, setting its priority and initializing the task execution environment.
+        Starts the process, sets priorities, initializes the executor, and runs the event loop.
 
         :return: None
+        :raise: None
         setup:
-            1. Set the process priority using the _setProcessPriority method.
-            2. Initialize the SystemExecutor as a ThreadPoolExecutor with a thread count determined by _setSystemExecutorThreadCount.
-            3. Create a new asyncio event loop and set it as the current event loop.
-            4. Attempt to run the task processor until completion:
-                4.1. If any exception occurs during execution, log the error with the process name and PID.
-            5. Ensure that the event loop is closed in the finally block to release resources.
-            6. Log an informational message indicating that the process has been closed.
+            1. Sets the process priority using _setProcessPriority().
+            2. Initializes a ThreadPoolExecutor with a configurable thread count.
+            3. Creates and sets a new asyncio event loop.
+            4. Runs the _taskProcessor coroutine until completion within the event loop.
+            5. Handles exceptions during execution, logging errors or handling specific exceptions like BrokenPipeError, EOFError, and KeyboardInterrupt.
+            6. Ensures the event loop is closed after execution, and logs the closure of the process.
+
+        Note:
+            - The method uses a ThreadPoolExecutor to manage concurrent tasks in the system.
+            - The event loop runs the asynchronous task processor and handles cleanup in the `finally` block.
+            - The method includes error handling to log unexpected terminations and handle interruptions gracefully (e.g., keyboard interrupts).
         """
 
         self._setProcessPriority()
@@ -1306,6 +1322,8 @@ class _ProcessObject(multiprocessing.Process):
             self.EventLoop.run_until_complete(self._taskProcessor())
         except Exception as e:
             _DefaultLogger.error(f"[{self.ProcessName} - {self.pid}] has been terminated due to {e}.")
+        except (BrokenPipeError, EOFError, KeyboardInterrupt):
+            self.CloseEvent.set()
         finally:
             self.EventLoop.close()
             _DefaultLogger.info(f"[{self.ProcessName} - {self.pid}] has been closed.")
@@ -1369,7 +1387,7 @@ class _ProcessObject(multiprocessing.Process):
         self._cleanupProcessMemory()
         last_cleanup_time: float = time.time()
         while not self.CloseEvent.is_set():
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.0001)
             current_time: float = time.time()
             if current_time - last_cleanup_time >= self.ConfigManager.IdleCleanupThreshold.value:
                 self._cleanupProcessMemory()
@@ -2064,15 +2082,21 @@ class _ThreadObject(threading.Thread):
 
     def run(self) -> None:
         """
-        Runs the event loop for processing tasks asynchronously.
+        Starts the thread's event loop, processes tasks asynchronously, and handles exceptions.
 
         :return: None
+        :raise: None
         setup:
-            1. Create a new asyncio event loop and set it as the current event loop.
-            2. Attempt to run the task processor until completion:
-                2.1. If any exception occurs during execution, log the error with the thread's name and identifier.
-            3. Ensure that the event loop is closed in the finally block to release resources.
-            4. Log an informational message indicating that the thread has been stopped.
+            1. Creates and sets a new asyncio event loop for the thread.
+            2. Runs the _taskProcessor coroutine until completion within the event loop.
+            3. Handles general exceptions and logs errors if the thread is terminated due to unexpected errors.
+            4. Catches specific exceptions like BrokenPipeError, EOFError, and KeyboardInterrupt, and sets the CloseEvent flag.
+            5. Ensures the event loop is closed after execution, and logs the closure of the thread.
+
+        Note:
+            - The method sets up a dedicated event loop for the thread and uses it to run the task processor asynchronously.
+            - Exception handling ensures that the thread's closure is logged, and any interruption or error is properly handled.
+            - The CloseEvent flag is set when the thread is interrupted (e.g., via KeyboardInterrupt).
         """
 
         self.EventLoop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
@@ -2081,6 +2105,8 @@ class _ThreadObject(threading.Thread):
             self.EventLoop.run_until_complete(self._taskProcessor())
         except Exception as e:
             _DefaultLogger.error(f"[{self.ThreadName} - {self.ident}] has been terminated due to {e}.")
+        except (BrokenPipeError, EOFError, KeyboardInterrupt):
+            self.CloseEvent.set()
         finally:
             self.EventLoop.close()
             _DefaultLogger.info(f"[{self.ThreadName} - {self.ident}] has been closed.")
@@ -2138,7 +2164,7 @@ class _ThreadObject(threading.Thread):
         """
 
         while not self.CloseEvent.is_set():
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.0001)
             try:
                 task_data: Tuple[str, _TaskObject, int] = self._getTaskData()
                 task_priority, task_object, retried = task_data
@@ -2708,6 +2734,7 @@ class _LoadBalancer(threading.Thread):
         self.ConfigManager: _ConfigManager = cm
         self.Logger: TheSeedCoreLogger = logger
         self.SystemExecutor: ThreadPoolExecutor = system_executor
+        self.LastExpandCheckTime = time.time()
         self.CloseEvent: multiprocessing.Event = multiprocessing.Event()
 
     def run(self) -> None:
@@ -2730,23 +2757,26 @@ class _LoadBalancer(threading.Thread):
             4. Log a message indicating that the load balancer has been closed when exiting the loop.
         """
 
-        self._cleanupMainProcessMemory()
-        self._cleanupServiceProcessMemory()
-        last_cleanup_time = time.time()
-        performance_report_time = time.time()
-        while not self.CloseEvent.is_set():
-            time.sleep(0.001)
-            self._updateProcessLoadStatus()
-            self._expandPolicyExecutor()
-            self._shrinkagePolicyExecutor()
-            if time.time() - performance_report_time >= 10:
-                self._showPerformanceReport()
-                performance_report_time = time.time()
-            if time.time() - last_cleanup_time > 300:
-                last_cleanup_time = time.time()
-                self._cleanupMainProcessMemory()
-                self._cleanupServiceProcessMemory()
-        self.Logger.info(f"[LoadBalancer] has been closed.")
+        try:
+            self._cleanupMainProcessMemory()
+            self._cleanupServiceProcessMemory()
+            last_cleanup_time = time.time()
+            performance_report_time = time.time()
+            while not self.CloseEvent.is_set():
+                time.sleep(0.001)
+                self._updateProcessLoadStatus()
+                self._expandPolicyExecutor()
+                self._shrinkagePolicyExecutor()
+                if time.time() - performance_report_time >= 10:
+                    self._showPerformanceReport()
+                    performance_report_time = time.time()
+                if time.time() - last_cleanup_time > 300:
+                    last_cleanup_time = time.time()
+                    self._cleanupMainProcessMemory()
+                    self._cleanupServiceProcessMemory()
+            self.Logger.info(f"[LoadBalancer] has been closed.")
+        except (BrokenPipeError, EOFError, Exception):
+            pass
 
     def stop(self) -> None:
         self.CloseEvent.set()
@@ -2873,7 +2903,7 @@ class _LoadBalancer(threading.Thread):
             try:
                 process_cpu_usage = _ResourceMonitor.processCpuUsage(process_obj.pid, 0.001)
                 process_memory_usage = _ResourceMonitor.processMemoryUsage(process_obj.pid)
-                weighted_load = max(0, min(int(process_cpu_usage + (process_memory_usage * 0.5) + (self.StatusManager.CoreProcessTaskStatusPool[process_name][1] * 0.5)), 100))
+                weighted_load = max(0, min(int(process_cpu_usage + (process_memory_usage * 0.1) + (self.StatusManager.CoreProcessTaskStatusPool[process_name][1] * 0.9)), 100))
                 self.StatusManager.updateCoreProcessLoadStatus(process_name, process_obj.pid, weighted_load)
             except Exception:
                 self.StatusManager.updateCoreProcessLoadStatus(process_name, process_obj.pid, 0)
@@ -2882,7 +2912,7 @@ class _LoadBalancer(threading.Thread):
             try:
                 process_cpu_usage = _ResourceMonitor.processCpuUsage(process_obj.pid, 0.001)
                 process_memory_usage = _ResourceMonitor.processMemoryUsage(process_obj.pid)
-                weighted_load = max(0, min(int(process_cpu_usage + (process_memory_usage * 0.5) + (self.StatusManager.ExpandProcessTaskStatusPool[process_name][1] * 0.5)), 100))
+                weighted_load = max(0, min(int(process_cpu_usage + (process_memory_usage * 0.1) + (self.StatusManager.ExpandProcessTaskStatusPool[process_name][1] * 0.9)), 100))
                 self.StatusManager.updateExpandProcessLoadStatus(process_name, process_obj.pid, weighted_load)
             except Exception:
                 self.StatusManager.updateExpandProcessLoadStatus(process_name, process_obj.pid, 0)
@@ -2911,31 +2941,47 @@ class _LoadBalancer(threading.Thread):
 
     def _autoExpand(self) -> None:
         """
-        Automatically handles the expansion of system processes based on current load.
+        Automatically expands threads and processes based on the current load and configuration settings.
 
-        This method monitors the current load of core and expansion processes.
-        If the combined load exceeds a certain threshold, it attempts to expand the processes accordingly.
-        It also ensures that the system does not exceed its maximum allowable process capacity.
-
-        :raises: None
+        :param None:
         :return: None
+        :raise: None
         setup:
-            1. Retrieve the current load for core processes from the StatusManager.
-            2. Retrieve the current load for expansion processes from the StatusManager (if applicable).
-            3. Calculate the total load by combining core and expansion process loads.
-            4. Compare the total load to a predefined threshold (ideal load per process, set to 90%).
-            5. If the load exceeds the threshold, check if process expansion is allowed.
-                5.1 If expansion is allowed, trigger the process expansion.
-                5.2 If expansion is not allowed, log a warning.
-            6. Ensure that expansion happens only when the system is not already scheduling tasks.
+            1. Core thread load is calculated by summing the individual thread load statuses.
+            2. If expandable threads exist, their load is also summed.
+            3. Total load is calculated by adding the core thread load and expanded thread load.
+            4. The ideal load per thread is determined by global task thresholds and core process count.
+            5. If total thread load exceeds the ideal load, and thread expansion is allowed, a thread expansion is triggered.
+            6. If thread expansion is not allowed, a warning is logged.
+            7. The process load is similarly calculated and the same conditions for expansion apply.
+            8. If the load exceeds the process threshold and expansion is allowed, the process is expanded.
+            9. If process expansion is not allowed, a warning is logged.
 
         Note:
-            - `_ProcessTaskSchedulingEvent`, `_ThreadTaskSchedulingEvent`, `_ProcessBalanceEvent`, and `_ThreadBalanceEvent`
-              are global events used for controlling task scheduling and balancing during process expansion.
-            - `ConfigManager.CoreProcessCount` and `StatusManager` are used to monitor and manage the system load and processes.
+            - The function uses global events (_ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent) for synchronization.
+            - Time checks ensure that expansion attempts are not too frequent.
         """
 
         global _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
+        if self.ConfigManager.CoreThreadCount.value != 0:
+            current_core_thread_total_load: int = sum([self.StatusManager.getCoreThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreThreadTaskStatusPool.items()])
+            if self.StatusManager.ExpandThreadTaskStatusPool:
+                current_expand_thread_total_load: int = sum([self.StatusManager.getExpandThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.ExpandThreadTaskStatusPool.items()])
+            else:
+                current_expand_thread_total_load: int = 0
+            thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
+            ideal_load_per_thread: int = self.ConfigManager.GlobalTaskThreshold.value - (self.ConfigManager.CoreProcessCount.value * self.ConfigManager.TaskThreshold.value) * 0.95
+            if thread_total_load >= ideal_load_per_thread:
+                allow_thread_expansion = self._isAllowExpansion("Thread")
+                if allow_thread_expansion and not _ThreadTaskSchedulingEvent.is_set():
+                    _ThreadBalanceEvent.set()
+                    self._expandThread()
+                    _ThreadBalanceEvent.clear()
+                elif not allow_thread_expansion and time.time() - self.LastExpandCheckTime >= 30:
+                    self.Logger.warning(f"Load reaches {int(ideal_load_per_thread)}%, but unable to expand more thread")
+                    self.LastExpandCheckTime = time.time()
+                else:
+                    pass
         if self.ConfigManager.CoreProcessCount.value != 0:
             current_core_process_total_load: int = sum([self.StatusManager.getCoreProcessLoadStatus(name)[1] for name, load_status in self.StatusManager.CoreProcessLoadStatusPool.items()])
             if self.StatusManager.ExpandProcessTaskStatusPool:
@@ -2943,64 +2989,53 @@ class _LoadBalancer(threading.Thread):
             else:
                 current_expand_process_total_load: int = 0
             process_total_load = max(0, min(100, current_core_process_total_load + current_expand_process_total_load))
-            ideal_load_per_process = 95
+            ideal_load_per_process = 98
             if process_total_load >= ideal_load_per_process:
                 allow_process_expansion = self._isAllowExpansion("Process")
                 if allow_process_expansion and not _ProcessTaskSchedulingEvent.is_set():
                     _ProcessBalanceEvent.set()
                     self._expandProcess()
                     _ProcessBalanceEvent.clear()
-                elif not allow_process_expansion:
+                elif not allow_process_expansion and time.time() - self.LastExpandCheckTime >= 30:
                     self.Logger.warning(f"Load reaches {int(ideal_load_per_process)}%, but unable to expand more process")
+                    self.LastExpandCheckTime = time.time()
                 else:
                     pass
 
-        current_core_thread_total_load: int = sum([self.StatusManager.getCoreThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreThreadTaskStatusPool.items()])
-        if self.StatusManager.ExpandThreadTaskStatusPool:
-            current_expand_thread_total_load: int = sum([self.StatusManager.getExpandThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.ExpandThreadTaskStatusPool.items()])
-        else:
-            current_expand_thread_total_load: int = 0
-        thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
-        threshold: int = self.ConfigManager.GlobalTaskThreshold.value - (self.ConfigManager.CoreProcessCount.value * self.ConfigManager.TaskThreshold.value)
-        if thread_total_load >= threshold * 0.95:
-            allow_thread_expansion = self._isAllowExpansion("Thread")
-            if allow_thread_expansion and not _ThreadTaskSchedulingEvent.is_set():
-                _ThreadBalanceEvent.set()
-                self._expandThread()
-                _ThreadBalanceEvent.clear()
-            elif not allow_thread_expansion:
-                self.Logger.warning(f"Load reaches {int(threshold * 0.95)}%, but unable to expand more thread")
-            else:
-                pass
-
     def _beforehandExpand(self) -> None:
         """
-        Handles the expansion of system processes and threads based on the total task count.
+        Prepares for expansion of threads and processes based on the current load and task count.
 
-        This method calculates the total load for both processes and threads, considering core and
-        expansion tasks. If the combined load exceeds a specific threshold (80% of the global task limit),
-        it attempts to expand either processes or threads, depending on the current system state.
-
-        :raises: None
+        :param None:
         :return: None
+        :raise: None
         setup:
-            1. Retrieve the current load for core processes and expansion processes.
-            2. Calculate the total task count by combining core and expansion process loads.
-            3. Retrieve the current load for core threads and expansion threads.
-            4. Calculate the total thread load by combining core and expansion thread loads.
-            5. If the total task and thread load exceeds 80% of the global task threshold:
-                5.1. Check if process expansion is allowed, and if no process task scheduling is in progress, expand processes.
-                5.2. Check if thread expansion is allowed, and if thread task scheduling is in progress, expand threads.
-            6. Log warnings if expansion is not possible.
+            1. Core thread load is calculated by summing the individual thread task loads.
+            2. If expandable threads exist, their load is also summed.
+            3. Total thread load is computed by adding core thread and expandable thread loads.
+            4. Core process task load is similarly calculated by summing individual process task loads.
+            5. If expandable processes exist, their load is summed as well.
+            6. The total process task count is the sum of core process and expandable process task loads.
+            7. If the combined thread and process task count exceeds 80% of the global task threshold, expansion checks are performed.
+            8. If process expansion is allowed and no task scheduling is in progress, process expansion is triggered.
+            9. If thread expansion is allowed and thread scheduling is active, thread expansion is triggered.
+            10. If expansion is not allowed or expansion events are being triggered too frequently, a warning is logged.
 
         Note:
-            - `_ProcessTaskSchedulingEvent` and `_ThreadTaskSchedulingEvent` are global events that control task scheduling for processes and threads.
-            - `_ProcessBalanceEvent` and `_ThreadBalanceEvent` are global events used for controlling process and thread balancing during expansion.
-            - `ConfigManager.GlobalTaskThreshold` is used to define the task threshold for expansion.
-            - `StatusManager` is used to track the current load status of processes and threads.
+            - The function uses global events (_ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent) for synchronization.
+            - Time checks ensure that expansion attempts are not too frequent (at least 30 seconds apart).
         """
 
         global _ProcessTaskSchedulingEvent, _ThreadTaskSchedulingEvent, _ProcessBalanceEvent, _ThreadBalanceEvent
+        if self.ConfigManager.CoreThreadCount.value != 0:
+            current_core_thread_total_load: int = sum([self.StatusManager.getCoreThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreThreadTaskStatusPool.items()])
+            if self.StatusManager.ExpandThreadTaskStatusPool:
+                current_expand_thread_total_load: int = sum([self.StatusManager.getExpandThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.ExpandThreadTaskStatusPool.items()])
+            else:
+                current_expand_thread_total_load: int = 0
+            thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
+        else:
+            thread_total_load: int = 0
         if self.ConfigManager.CoreProcessCount.value != 0:
             current_core_process_total_load: int = sum([self.StatusManager.getCoreProcessTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreProcessTaskStatusPool.items()])
             if self.StatusManager.ExpandProcessTaskStatusPool:
@@ -3010,25 +3045,25 @@ class _LoadBalancer(threading.Thread):
             process_total_task_count: int = current_core_process_total_load + current_expand_process_total_load
         else:
             process_total_task_count: int = 0
-        current_core_thread_total_load: int = sum([self.StatusManager.getCoreThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.CoreThreadTaskStatusPool.items()])
-        if self.StatusManager.ExpandThreadTaskStatusPool:
-            current_expand_thread_total_load: int = sum([self.StatusManager.getExpandThreadTaskStatus(name)[1] for name, load_status in self.StatusManager.ExpandThreadTaskStatusPool.items()])
-        else:
-            current_expand_thread_total_load: int = 0
-        thread_total_load: int = current_core_thread_total_load + current_expand_thread_total_load
         if (process_total_task_count + thread_total_load) >= self.ConfigManager.GlobalTaskThreshold.value * 0.8:
             if self._isAllowExpansion("Process") and not _ProcessTaskSchedulingEvent.is_set():
                 _ProcessBalanceEvent.set()
                 self._expandProcess()
                 _ProcessBalanceEvent.clear()
-            else:
+            elif time.time() - self.LastExpandCheckTime >= 30:
                 self.Logger.warning(f"Task count reaches {self.ConfigManager.GlobalTaskThreshold.value}, but unable to expand more process")
+                self.LastExpandCheckTime = time.time()
+            else:
+                pass
             if self._isAllowExpansion("Thread") and _ThreadTaskSchedulingEvent.is_set():
                 _ThreadBalanceEvent.set()
                 self._expandThread()
                 _ThreadBalanceEvent.clear()
-            else:
+            elif time.time() - self.LastExpandCheckTime >= 30:
                 self.Logger.warning(f"Task count reaches {self.ConfigManager.GlobalTaskThreshold.value}, but unable to expand more thread")
+                self.LastExpandCheckTime = time.time()
+            else:
+                pass
 
     def _isAllowExpansion(self, expand_type: Literal["Process", "Thread"]) -> bool:
         """
@@ -3723,20 +3758,25 @@ class _ConcurrentSystem:
 
     def _initSystem(self) -> None:
         """
-        Initializes the concurrent system by starting core processes and threads based on configuration settings.
+        Initializes the system by starting core processes and threads, and sets up task schedulers and executors.
 
+        :param None:
         :return: None
-        :raise: Raises an exception if there is an error starting the processes or threads.
+        :raise: None
         setup:
-            1. Check the system type; if it's Windows, set the main process priority.
-            2. Create a list to hold futures for the processes and threads being started.
-            3. Submit tasks to start the specified number of core processes and store the futures.
-            4. Submit tasks to start the specified number of core threads and store the futures.
-            5. Wait for all submitted futures to complete, ensuring all processes and threads are started.
-            6. Start the load balancer.
-            7. If the core process count is not zero, start the process task scheduler.
-            8. Start the thread task scheduler.
-            9. Start the callback executor.
+            1. If the system type is "Windows", sets the main process priority.
+            2. Initializes an empty list to store Future objects for asynchronous execution.
+            3. Submits tasks to the SystemThreadPoolExecutor to start core processes based on the configured CoreProcessCount.
+            4. Submits tasks to the SystemThreadPoolExecutor to start core threads based on the configured CoreThreadCount.
+            5. Waits for all futures to complete by calling result() on each one.
+            6. If CoreProcessCount is greater than 0, starts the ProcessTaskScheduler.
+            7. If CoreThreadCount is greater than 0, starts the ThreadTaskScheduler.
+            8. Starts the LoadBalancer and CallbackExecutor.
+
+        Note:
+            - The method uses a SystemThreadPoolExecutor to handle the concurrent execution of core processes and threads.
+            - Task schedulers (ProcessTaskScheduler and ThreadTaskScheduler) and system components like the LoadBalancer and CallbackExecutor are initialized after processes and threads are ready.
+            - The system setup is designed to handle both processes and threads concurrently and efficiently.
         """
 
         global _CoreProcessPool, _CoreThreadPool
@@ -3753,10 +3793,11 @@ class _ConcurrentSystem:
             futures.append(future)
         for future in futures:
             future.result()
-        self.LoadBalancer.start()
         if self.ConfigManager.CoreProcessCount.value != 0:
             self.ProcessTaskScheduler.start()
-        self.ThreadTaskScheduler.start()
+        if self.ConfigManager.CoreThreadCount.value != 0:
+            self.ThreadTaskScheduler.start()
+        self.LoadBalancer.start()
         self.CallbackExecutor.startExecutor()
 
     def _setMainProcessPriority(self) -> None:
@@ -3864,7 +3905,7 @@ def _ConnectConcurrentSystem(main_event_loop: asyncio.AbstractEventLoop, **confi
     return _concurrent_system
 
 
-def serviceProcessID() -> int:
+def _serviceProcessID() -> int:
     """
     Retrieves the process ID of the service.
 
@@ -3877,181 +3918,11 @@ def serviceProcessID() -> int:
     """
 
     if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("TheSeedCore ConcurrentSystem has not been initialized.")
+        return 0
     return _ConcurrentSystem.INSTANCE.StatusManager.SharedObjectManagerID
 
 
-def submitAsyncTask(task: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> asyncio.Future:
-    """
-    Submits an asynchronous task to the main event loop.
-
-    This function allows scheduling a coroutine task for execution in the main event loop. It ensures the provided
-    task is a coroutine function before submitting it.
-
-    :param task: The coroutine function to execute asynchronously.
-    :param args: Positional arguments to pass to the task function.
-    :param kwargs: Keyword arguments to pass to the task function.
-    :return: An asyncio `Future` object representing the scheduled coroutine task.
-    :raises TypeError: If the provided task is not a coroutine function.
-    setup:
-        1. Imports the `MainEventLoop` function to access the primary event loop.
-        2. Checks if the provided `task` is a coroutine function.
-        3. Schedules the task on the main event loop and returns it as a `Future` object.
-    """
-
-    from . import MainEventLoop
-    if not asyncio.iscoroutinefunction(task):
-        raise TypeError(f"The task <{task.__name__}> must be a coroutine function.")
-    task_future = MainEventLoop().create_task(task(*args, **kwargs))
-    return task_future
-
-
-def submitProcessTask(task: callable, priority: int = 0, callback: Optional[callable] = None, future: Optional[type(TaskFuture)] = None, *args, **kwargs: Unpack[_TaskConfig]) -> TaskFuture:
-    """
-    Submits a task for processing with an optional priority and callback.
-
-    :param task: The callable task to be executed.
-    :param priority: An integer representing the task's priority (default is 0).
-    :param callback: An optional callable to be executed after the task completes.
-    :param future: An optional future instance to track the task's execution.
-    :param args: Additional positional arguments to pass to the task.
-    :param kwargs: Additional keyword arguments to pass to the task configuration.
-    :return: A TaskFuture instance associated with the submitted task.
-    :raise: Raises a RuntimeError if the task submission is attempted outside the main process,
-            if the ConcurrentSystem is not initialized, or if the core process count is zero.
-    setup:
-        1. Check if the current process is the main process; raise an error if not.
-        2. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
-        3. Ensure that the core process count is greater than zero; raise an error if it is zero.
-        4. Generate a unique task ID.
-        5. Attempt to serialize the task; log an error and return if serialization fails.
-        6. Store the callback if provided.
-        7. Create a task object with the provided parameters and put it in the processing queue.
-    """
-
-    global _CallbackObject, _CoreProcessPool, _ExpandProcessPool
-    if multiprocessing.current_process().name != 'MainProcess':
-        raise RuntimeError("Process task submission must be done in the main process.")
-    if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("TheSeedCore ConcurrentSystem has not been initialized.")
-    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value == 0:
-        raise RuntimeError("Core process count is set to 0. Process task submission is not allowed.")
-    task_id: str = f"{uuid.uuid4()}"
-    future_instance: TaskFuture = future() if future is not None else TaskFuture()
-    future_instance.taskID = task_id
-    try:
-        pickle.dumps(task)
-    except (pickle.PicklingError, AttributeError, TypeError) as e:
-        _ConcurrentSystem.INSTANCE.Logger.error(f"Task [{task.__name__} - {task_id}] serialization failed. Task submission has been rejected.\n{e}")
-        return future_instance
-    if callback is not None:
-        _CallbackObject[task_id] = callback
-    task_object: _TaskObject = _TaskObject(task, task_id, False if callback is None else True, *args, **kwargs)
-    _ConcurrentSystem.INSTANCE.ProcessTaskStorageQueue.put_nowait((priority if not priority > 10 else 10, task_object))
-    return future_instance
-
-
-def submitThreadTask(task: callable, priority: int = 0, callback: callable = None, future: type(TaskFuture) = None, *args, **kwargs: Unpack[_TaskConfig]) -> TaskFuture:
-    """
-    Submits a task for execution in a thread with an optional priority and callback.
-
-    :param task: The callable task to be executed in a thread.
-    :param priority: An integer representing the task's priority (default is 0).
-    :param callback: An optional callable to be executed after the task completes.
-    :param future: An optional future instance to track the task's execution.
-    :param args: Additional positional arguments to pass to the task.
-    :param kwargs: Additional keyword arguments to pass to the task configuration.
-    :return: A TaskFuture instance associated with the submitted task.
-    :raise: Raises a RuntimeError if the task submission is attempted outside the main process or if the ConcurrentSystem is not initialized.
-    setup:
-        1. Check if the current process is the main process; raise an error if not.
-        2. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
-        3. Generate a unique task ID.
-        4. Store the callback if provided.
-        5. Create a task object with the provided parameters and put it in the thread processing queue.
-    """
-
-    global _CallbackObject
-    if multiprocessing.current_process().name != 'MainProcess':
-        raise RuntimeError("Thread task submission must be done in the main process.")
-    if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("TheSeedCore ConcurrentSystem has not been initialized.")
-    task_id: str = f"{uuid.uuid4()}"
-    future_instance: TaskFuture = future() if future is not None else TaskFuture()
-    future_instance.taskID = task_id
-    if callback is not None:
-        _CallbackObject[task_id] = callback
-    task_object: _TaskObject = _TaskObject(task, task_id, False if callback is None else True, *args, **kwargs)
-    _ConcurrentSystem.INSTANCE.ThreadTaskStorageQueue.put_nowait((priority if not priority > 10 else 5, task_object))
-    return future_instance
-
-
-def submitSystemProcessTask(task: callable, count: int = 1, *args, **kwargs) -> Union[Future, List[Future]]:
-    """
-    Submits a task for execution in the system process pool with an optional count of instances.
-
-    :param task: The callable task to be executed.
-    :param count: An integer representing the number of instances to submit (default is 1).
-    :param args: Additional positional arguments to pass to the task.
-    :param kwargs: Additional keyword arguments to pass to the task configuration.
-    :return: A Future object if count is 1; a list of Future objects if count is greater than 1.
-    :raise: Raises a RuntimeError if the ConcurrentSystem is not initialized or if the core process count is zero.
-    :raise: Raises a ValueError if the provided task is not callable.
-    setup:
-        1. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
-        2. Check if the task is callable; raise a ValueError if not.
-        3. Ensure that the core process count is greater than zero; raise an error if it is zero.
-        4. Submit the specified number of task instances to the system process pool and collect the futures.
-    """
-
-    if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("The ConcurrentSystem has not been initialized.")
-    if not callable(task):
-        raise ValueError("The task must be a callable.")
-    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value == 0:
-        raise RuntimeError("Core process count is set to 0. Process task submission is not allowed.")
-    futures: List[Future] = []
-    if count > 1:
-        for i in range(count):
-            future: Future = _ConcurrentSystem.INSTANCE.SystemProcessPoolExecutor.submit(task, *args, **kwargs)
-            futures.append(future)
-        return futures
-    future: Future = _ConcurrentSystem.INSTANCE.SystemProcessPoolExecutor.submit(task, *args, **kwargs)
-    return future
-
-
-def submitSystemThreadTask(task: callable, count: int = 1, *args, **kwargs) -> Union[Future, List[Future]]:
-    """
-    Submits a task for execution in the system thread pool with an optional count of instances.
-
-    :param task: The callable task to be executed.
-    :param count: An integer representing the number of instances to submit (default is 1).
-    :param args: Additional positional arguments to pass to the task.
-    :param kwargs: Additional keyword arguments to pass to the task configuration.
-    :return: A Future object if count is 1; a list of Future objects if count is greater than 1.
-    :raise: Raises a RuntimeError if the ConcurrentSystem is not initialized.
-    :raise: Raises a ValueError if the provided task is not callable.
-    setup:
-        1. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
-        2. Check if the task is callable; raise a ValueError if not.
-        3. Submit the specified number of task instances to the system thread pool and collect the futures.
-    """
-
-    if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("The ConcurrentSystem has not been initialized.")
-    if not callable(task):
-        raise ValueError("The task must be a callable.")
-    futures: List[Future] = []
-    if count > 1:
-        for i in range(count):
-            future: Future = _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.submit(task, *args, **kwargs)
-            futures.append(future)
-        return futures
-    future: Future = _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.submit(task, *args, **kwargs)
-    return future
-
-
-def closeConcurrentSystem() -> None:
+def _closeConcurrentSystem() -> None:
     """
     Closes the concurrent system, stopping all running processes and threads.
 
@@ -4077,7 +3948,7 @@ def closeConcurrentSystem() -> None:
     if multiprocessing.current_process().name != 'MainProcess':
         raise RuntimeError("System closing must be done in the main process.")
     if _ConcurrentSystem.INSTANCE is None:
-        raise RuntimeError("TheSeedCore ConcurrentSystem has not been initialized.")
+        return
     futures: List[Future] = []
     for process_name, process_obj in _CoreProcessPool.items():
         future: Future = _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.submit(process_obj.stop)
@@ -4096,8 +3967,196 @@ def closeConcurrentSystem() -> None:
     _ConcurrentSystem.INSTANCE.LoadBalancer.stop()
     if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value != 0:
         _ConcurrentSystem.INSTANCE.ProcessTaskScheduler.stop()
-    _ConcurrentSystem.INSTANCE.ThreadTaskScheduler.stop()
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreThreadCount.value != 0:
+        _ConcurrentSystem.INSTANCE.ThreadTaskScheduler.stop()
     _ConcurrentSystem.INSTANCE.CallbackExecutor.closeExecutor()
-    _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.shutdown(wait=True, cancel_futures=True)
     if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value != 0:
         _ConcurrentSystem.INSTANCE.SystemProcessPoolExecutor.shutdown(wait=True, cancel_futures=True)
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreThreadCount.value != 0:
+        _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.shutdown(wait=True, cancel_futures=True)
+
+
+def submitAsyncTask(task: Callable[..., Coroutine[Any, Any, Any]], *args, **kwargs) -> asyncio.Future | None:
+    """
+    Submits an asynchronous task to the main event loop.
+
+    This function allows scheduling a coroutine task for execution in the main event loop. It ensures the provided
+    task is a coroutine function before submitting it.
+
+    :param task: The coroutine function to execute asynchronously.
+    :param args: Positional arguments to pass to the task function.
+    :param kwargs: Keyword arguments to pass to the task function.
+    :return: An asyncio `Future` object representing the scheduled coroutine task.
+    :raises TypeError: If the provided task is not a coroutine function.
+    setup:
+        1. Imports the `MainEventLoop` function to access the primary event loop.
+        2. Checks if the provided `task` is a coroutine function.
+        3. Schedules the task on the main event loop and returns it as a `Future` object.
+    """
+
+    from . import MainEventLoop
+    if not asyncio.iscoroutinefunction(task):
+        _DefaultLogger.warning(f"The task <{task.__name__}> must be a coroutine function.")
+        return None
+    task_future = MainEventLoop().create_task(task(*args, **kwargs))
+    return task_future
+
+
+def submitProcessTask(task: callable, priority: int = 0, callback: Optional[callable] = None, future: Optional[type(TaskFuture)] = None, *args, **kwargs: Unpack[_TaskConfig]) -> TaskFuture | None:
+    """
+    Submits a task for processing with an optional priority and callback.
+
+    :param task: The callable task to be executed.
+    :param priority: An integer representing the task's priority (default is 0).
+    :param callback: An optional callable to be executed after the task completes.
+    :param future: An optional future instance to track the task's execution.
+    :param args: Additional positional arguments to pass to the task.
+    :param kwargs: Additional keyword arguments to pass to the task configuration.
+    :return: A TaskFuture instance associated with the submitted task.
+    :raise: Raises a RuntimeError if the task submission is attempted outside the main process,
+            if the ConcurrentSystem is not initialized, or if the core process count is zero.
+    setup:
+        1. Check if the current process is the main process; raise an error if not.
+        2. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
+        3. Ensure that the core process count is greater than zero; raise an error if it is zero.
+        4. Generate a unique task ID.
+        5. Attempt to serialize the task; log an error and return if serialization fails.
+        6. Store the callback if provided.
+        7. Create a task object with the provided parameters and put it in the processing queue.
+    """
+
+    global _CallbackObject, _CoreProcessPool, _ExpandProcessPool
+    if multiprocessing.current_process().name != 'MainProcess':
+        _DefaultLogger.warning("Process task submission must be done in the main process.")
+        return None
+    if _ConcurrentSystem.INSTANCE is None:
+        _DefaultLogger.warning("TheSeedCore ConcurrentSystem has not been initialized.")
+        return None
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value == 0:
+        _DefaultLogger.warning("Core process count is set to 0. Process task submission is not allowed.")
+        return None
+    task_id: str = str(uuid.uuid4())
+    future_instance: TaskFuture = future() if future is not None else TaskFuture(task_id)
+    try:
+        pickle.dumps(task)
+    except (pickle.PicklingError, AttributeError, TypeError) as e:
+        _ConcurrentSystem.INSTANCE.Logger.error(f"Task [{task.__name__} - {task_id}] serialization failed. Task submission has been rejected.\n{e}")
+        return None
+    if callback is not None:
+        _CallbackObject[task_id] = callback
+    task_object: _TaskObject = _TaskObject(task, task_id, False if callback is None else True, *args, **kwargs)
+    _ConcurrentSystem.INSTANCE.ProcessTaskStorageQueue.put_nowait((priority if not priority > 10 else 0, task_object))
+
+    return future_instance
+
+
+def submitThreadTask(task: callable, priority: int = 0, callback: callable = None, future: type(TaskFuture) = None, *args, **kwargs: Unpack[_TaskConfig]) -> TaskFuture | None:
+    """
+    Submits a task for execution in a thread with an optional priority and callback.
+
+    :param task: The callable task to be executed in a thread.
+    :param priority: An integer representing the task's priority (default is 0).
+    :param callback: An optional callable to be executed after the task completes.
+    :param future: An optional future instance to track the task's execution.
+    :param args: Additional positional arguments to pass to the task.
+    :param kwargs: Additional keyword arguments to pass to the task configuration.
+    :return: A TaskFuture instance associated with the submitted task.
+    :raise: Raises a RuntimeError if the task submission is attempted outside the main process or if the ConcurrentSystem is not initialized.
+    setup:
+        1. Check if the current process is the main process; raise an error if not.
+        2. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
+        3. Generate a unique task ID.
+        4. Store the callback if provided.
+        5. Create a task object with the provided parameters and put it in the thread processing queue.
+    """
+
+    global _CallbackObject
+    if multiprocessing.current_process().name != 'MainProcess':
+        _DefaultLogger.warning("Thread task submission must be done in the main process.")
+        return None
+    if _ConcurrentSystem.INSTANCE is None:
+        _DefaultLogger.warning("TheSeedCore ConcurrentSystem has not been initialized.")
+        return None
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreThreadCount.value == 0:
+        _DefaultLogger.warning("Core thread count is set to 0. Thread task submission is not allowed.")
+        return None
+    task_id: str = str(uuid.uuid4())
+    future_instance: TaskFuture = future() if future is not None else TaskFuture(task_id)
+    if callback is not None:
+        _CallbackObject[task_id] = callback
+    task_object: _TaskObject = _TaskObject(task, task_id, False if callback is None else True, *args, **kwargs)
+    _ConcurrentSystem.INSTANCE.ThreadTaskStorageQueue.put_nowait((priority if not priority > 10 else 0, task_object))
+    return future_instance
+
+
+def submitSystemProcessTask(task: callable, count: int = 1, *args, **kwargs) -> Union[Future, List[Future], None]:
+    """
+    Submits a task for execution in the system process pool with an optional count of instances.
+
+    :param task: The callable task to be executed.
+    :param count: An integer representing the number of instances to submit (default is 1).
+    :param args: Additional positional arguments to pass to the task.
+    :param kwargs: Additional keyword arguments to pass to the task configuration.
+    :return: A Future object if count is 1; a list of Future objects if count is greater than 1.
+    :raise: Raises a RuntimeError if the ConcurrentSystem is not initialized or if the core process count is zero.
+    :raise: Raises a ValueError if the provided task is not callable.
+    setup:
+        1. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
+        2. Check if the task is callable; raise a ValueError if not.
+        3. Ensure that the core process count is greater than zero; raise an error if it is zero.
+        4. Submit the specified number of task instances to the system process pool and collect the futures.
+    """
+
+    if _ConcurrentSystem.INSTANCE is None:
+        _DefaultLogger.warning("The ConcurrentSystem has not been initialized.")
+        return None
+    if not callable(task):
+        _DefaultLogger.warning("The task must be a callable.")
+        return None
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreProcessCount.value == 0:
+        _DefaultLogger.warning("Core process count is set to 0. Process task submission is not allowed.")
+        return None
+    futures: List[Future] = []
+    if count > 1:
+        for i in range(count):
+            future: Future = _ConcurrentSystem.INSTANCE.SystemProcessPoolExecutor.submit(task, *args, **kwargs)
+            futures.append(future)
+        return futures
+    future: Future = _ConcurrentSystem.INSTANCE.SystemProcessPoolExecutor.submit(task, *args, **kwargs)
+    return future
+
+
+def submitSystemThreadTask(task: callable, count: int = 1, *args, **kwargs) -> Union[Future, List[Future], None]:
+    """
+    Submits a task for execution in the system thread pool with an optional count of instances.
+
+    :param task: The callable task to be executed.
+    :param count: An integer representing the number of instances to submit (default is 1).
+    :param args: Additional positional arguments to pass to the task.
+    :param kwargs: Additional keyword arguments to pass to the task configuration.
+    :return: A Future object if count is 1; a list of Future objects if count is greater than 1.
+    :raise: Raises a RuntimeError if the ConcurrentSystem is not initialized.
+    :raise: Raises a ValueError if the provided task is not callable.
+    setup:
+        1. Verify that the _ConcurrentSystem is initialized; raise an error if it is not.
+        2. Check if the task is callable; raise a ValueError if not.
+        3. Submit the specified number of task instances to the system thread pool and collect the futures.
+    """
+
+    if _ConcurrentSystem.INSTANCE is None:
+        _DefaultLogger.warning("The ConcurrentSystem has not been initialized.")
+        return None
+    if not callable(task):
+        _DefaultLogger.warning("The task must be a callable.")
+        return None
+    if _ConcurrentSystem.INSTANCE.ConfigManager.CoreThreadCount.value == 0:
+        _DefaultLogger.warning("Core thread count is set to 0. Thread task submission is not allowed.")
+        return None
+    futures: List[Future] = []
+    if count > 1:
+        for i in range(count):
+            future: Future = _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.submit(task, *args, **kwargs)
+            futures.append(future)
+        return futures
+    future: Future = _ConcurrentSystem.INSTANCE.SystemThreadPoolExecutor.submit(task, *args, **kwargs)
+    return future
