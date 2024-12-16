@@ -1,36 +1,8 @@
 # TheSeedCoreInterface
 
-## 公共变量
-
-**`SystemType`**：系统类型，取值为`"Windows"`、`"Linux"`或`"Darwin"`。
-
-**`DevelopmentEnv`**：是否为开发环境，取值为`True`或`False`，如果程序被打包，则为`False`。
-
-**`RootDirectoryPath`**：程序根目录路径, 如果程序被打包，则目录指向exe可执行程序的同级目录，否则指向TheSeedCore包的所在目录。
-
-**`ExternalLibraryDirectoryPath`**：外部库目录路径，如果程序被打包，则目录指向exe可执行程序的同级目录，否则指向TheSeedCore包的所在目录。
-
-**`ExternalServiceDirectoryPath`**：外部服务目录路径，如果程序被打包，则目录指向exe可执行程序的同级目录，否则指向TheSeedCore包的所在目录。
-
-**`DataDirectoryPath`**：数据目录路径，指向`RootDirectoryPath`/`TheSeedCoreData`。
-
-**`DatabaseDirectoryPath`**：数据库目录路径，指向`DataDirectoryPath`/`Database`。
-
-**`FlaskDataDirectoryPath`**：Flask数据目录路径，指向`DataDirectoryPath`/`Flask`。
-
-**`FlaskStaticFolderPath`**：Flask静态文件目录路径，指向`FlaskDataDirectoryPath`/`Static`。
-
-**`FlaskTemplateFolderPath`**：Flask模板文件目录路径，指向`FlaskDataDirectoryPath`/`Template`。
-
-**`FlaskInstanceFolderPath`**：Flask实例文件目录路径，指向`FlaskDataDirectoryPath`/`Instance`。
-
-**`FlaskRootFolderPath`**：Flask根目录路径，指向`RootDirectoryPath`/`Root`。
-
-**`LogsDirectoryPath`**：日志目录路径，指向`DataDirectoryPath`/`Logs`。
-
 ## 配置/枚举
 
-**`Priority`**：进程优先级，取值为`Priority.IDLE`、`Priority.BELOW_NORMAL`、`Priority.NORMAL`、`Priority.ABOVE_NORMAL`、`Priority.HIGH`、`Priority.REALTIME`。
+**`ProcessPriority`**：进程优先级，取值为`ProcessPriority.IDLE`、`ProcessPriority.BELOW_NORMAL`、`ProcessPriority.NORMAL`、`ProcessPriority.ABOVE_NORMAL`、`ProcessPriority.HIGH`、`ProcessPriority.REALTIME`。
 
 **`ExpandPolicy`**：扩展策略，取值为`ExpandPolicy.NoExpand`、`ExpandPolicy.AutoExpand`、`ExpandPolicy.BeforehandExpand`。
 
@@ -40,17 +12,18 @@
 
 **`ConnectTheSeedCore`**：连接TheSeedCore，初始化事件循环。
 
-- **`check_env`**：是否检查环境依赖，默认为`True`。
-- **`quit_qapp`**：异步事件循环退出时是否退出Qt应用程序，PySide6版本小于6.7.0时该值不生效，默认为`True`。
-- **`handle_sigint`**：是否处理SIGINT信号，PySide6版本小于6.7.0时该值不生效，默认为`False`。
-- **`MainPriority`**：主进程优先级，可选，默认为`Priority.NORMAL`。
-- **`CoreProcessCount`**：核心进程数，框架会自动检测最大值，为`0`时进程池将不可用，为`None`时自动设置，默认为`None`。
-- **`CoreThreadCount`**：核心线程数，框架会自动检测最大值，为`0`时线程池将不可用，为`None`时自动设置，默认为`None`。
+- **`CheckEnv`**：是否检查环境依赖，默认为`True`。
+- **`QuitQApp`**：异步事件循环退出时是否退出Qt应用程序，PySide6版本小于 `6.7.0` 时该值不生效，默认为`True`。
+- **`HandleSigint`**：是否处理SIGINT信号，PySide6版本小于 `6.7.0` 时该值不生效，默认为`False`。
+- **`MainProcessPriority`**：主进程优先级，可选，默认为`ProcessPriority.NORMAL`。
+- **`CoreProcessCount`**：核心进程数，框架会自动检测最大值，为`None`时进程池将不可用，默认为`None`。
+- **`CoreThreadCount`**：核心线程数，框架会自动检测最大值，为`None`时线程池将不可用，默认为`None`。
 - **`MaximumProcessCount`**：最大进程数，框架会自动检测最大值，为`None`时自动设置，默认为`None`。
 - **`MaximumThreadCount`**：最大线程数，框架会自动检测最大值，为`None`时自动设置，默认为`None`。
 - **`IdleCleanupThreshold`**：进程内存空闲清理阈值，为`None`时自动设置，默认为`None`。
 - **`TaskThreshold`**：每个进程和线程的任务数量阈值，为`None`时自动设置，默认为`None`。
 - **`GlobalTaskThreshold`**：全局任务队列阈值，为`None`时自动设置，默认为`None`。
+- **`SubProcessPriority`**：子进程优先级，可选，默认为`ProcessPriority.NORMAL`。
 - **`ExpandPolicy`**：扩展策略，默认为`ExpandPolicy.AutoExpand`。
 - **`ShrinkagePolicy`**：收缩策略，默认为`ShrinkagePolicy.AutoShrink`。
 - **`ShrinkagePolicyTimeout`**：收缩策略超时时间，默认为`5`秒。
@@ -83,9 +56,9 @@ if __name__ == "__main__":
         check_env=True,
         quit_qapp=False,
         handle_sigint=False,
-        MainPriority=TSC.Priority.NORMAL,
-        CoreProcessCount=0,  # 不使用进程池
-        CoreThreadCount=0,  # 不使用线程池
+        MainPriority=TSC.ProcessPriority.NORMAL,
+        CoreProcessCount=None,  # 不使用进程池
+        CoreThreadCount=None,  # 不使用线程池
         MaximumProcessCount=None,
         MaximumThreadCount=None,
         IdleCleanupThreshold=None,
@@ -148,9 +121,9 @@ if __name__ == "__main__":
         check_env=True,
         quit_qapp=True,
         handle_sigint=True,
-        MainPriority=TSC.Priority.NORMAL,
-        CoreProcessCount=0,  # 不使用进程池
-        CoreThreadCount=0,  # 不使用线程池
+        MainPriority=TSC.ProcessPriority.NORMAL,
+        CoreProcessCount=None,  # 不使用进程池
+        CoreThreadCount=None,  # 不使用线程池
         MaximumProcessCount=None,
         MaximumThreadCount=None,
         IdleCleanupThreshold=None,
@@ -198,7 +171,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    TSC.ConnectTheSeedCore(CoreProcessCount=0)
+    TSC.ConnectTheSeedCore(CoreProcessCount=None, CoreThreadCount=4)
     TSC.MainEventLoop().create_task(main())
     TSC.LinkStart()
 ```
@@ -212,8 +185,6 @@ if __name__ == "__main__":
 - **`lock`**：可选，是否为任务加锁，默认为`False`。
 - **`lock_timeout`**：可选，任务锁超时时间，默认为`3`秒。
 - **`timeout`**：可选，任务超时时间，为`None`时不会检测超时，默认为`None`。
-- **`gpu_boost`**：可选，是否使用GPU加速，默认为`False`。
-- **`gpu_id`**：可选，GPU设备ID，默认为`0`。
 - **`retry`**：可选，任务失败时是否重试，默认为`False`。
 - **`max_retries`**：可选，任务失败时最大重试次数，默认为`3`。
 - **`return`**：返回`TaskFuture`类实例对象。
@@ -249,7 +220,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    TSC.ConnectTheSeedCore(CoreProcessCount=4)
+    TSC.ConnectTheSeedCore(CoreProcessCount=4, CoreThreadCount=None)
     TSC.MainEventLoop().create_task(main())
     TSC.LinkStart()
 ```
@@ -263,8 +234,6 @@ if __name__ == "__main__":
 - **`lock`**：可选，是否为任务加锁，默认为`False`。
 - **`lock_timeout`**：可选，任务锁超时时间，默认为`3`秒。
 - **`timeout`**：可选，任务超时时间，为`None`时不会检测超时，默认为`None`。
-- **`gpu_boost`**：可选，是否使用GPU加速，默认为`False`。
-- **`gpu_id`**：可选，GPU设备ID，默认为`0`。
 - **`retry`**：可选，任务失败时是否重试，默认为`False`。
 - **`max_retries`**：可选，任务失败时最大重试次数，默认为`3`。
 - **`return`**：返回`TaskFuture`类实例对象。
@@ -393,7 +362,7 @@ if __name__ == "__main__":
 **`实例参数`**：
 
 - **`name`**：数据库名称，不需要包含后缀，必填。
-- **`path`**：数据库路径，不填写时默认为`DatabaseDirectoryPath`，可选。
+- **`path`**：数据库路径，必填。
 - **`stay_connected`**：是否保持连接，为`True`时数据库连接不会关闭，为`False`时数据库连接会在每次操作后关闭，默认为`False`。
 - **`encryptor`**：数据库加密器，必须为`Security`模块的`AESEncryptor`实例，不指定则无法使用数据加密，默认为`None`。
 
@@ -410,7 +379,7 @@ test_db = TSC.SQLiteDatabase("TestDB")
 - **`host`**：数据库主机地址，必填。
 - **`user`**：数据库用户名，必填。
 - **`password`**：数据库密码，必填。
-- **`stay_connected`：是否保持连接，为`True`时数据库连接不会关闭，为`False`时数据库连接会在每次操作后关闭，默认为`False`。
+- **`stay_connected`**：是否保持连接，为`True`时数据库连接不会关闭，为`False`时数据库连接会在每次操作后关闭，默认为`False`。
 - **`encryptor`**：数据库加密器，必须为`Security`模块的`AESEncryptor`实例，不指定则无法使用数据加密，默认为`None`。
 
 ### 实例接口（`MySQLDatabase`和`SQLiteDatabase`的实例接口一致）
@@ -749,7 +718,7 @@ print(result2)
 **`实例参数`**：
 
 - **`name`**：日志名称，必填。
-- **`path`**：日志文件路径，不填写时默认为`LogsDirectoryPath`，可选。
+- **`path`**：必填。
 - **`backup_count`**：日志备份天数，默认为`7`天。
 - **`level`**：日志级别，默认为`logging.DEBUG`。
 - **`debug`**：是否输出调试信息，默认为`DevelopmentEnv`。

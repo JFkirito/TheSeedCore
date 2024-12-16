@@ -92,8 +92,6 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 ├── Database.py
 
-├── InstanceManager.py
-
 ├── LoggerModule.py
 
 ├── Network.py
@@ -115,29 +113,16 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 
 2. 如果在缺少依赖的情况下仍然使用该模块的功能，将会抛出 `ModuleNotFoundError` 异常。
 
-3. 如果不希望看到依赖检查信息，可以在调用 `ConnectTheSeedCore` 时传递 `check_env=False`，依赖检查信息将不会显示在控制台中。
+3. 如果不希望看到依赖检查信息，可以在调用 `ConnectTheSeedCore` 时传递 `CheckEnv=False`，依赖检查信息将不会显示在控制台中。
 
 ```python
-import TheSeedCore as TSC
+import Backup as TSC
 
 if __name__ == "__main__":
     # 传递check_env=False将不会显示依赖检查信息
-    TSC.ConnectTheSeedCore(check_env=False)
+    TSC.ConnectTheSeedCore(CheckEnv=False)
     TSC.LinkStart()
 ```
-
-### 目录
-
-- **以下文件夹根据不同环境会存放在不同目录**
-    1. 开发环境：目录会生成在和TheSeedCore同级的目录下。
-    2. 生产环境：目录会生成在和应用程序同级的目录下。
-
-- **_TheSeedCoreData_**
-    1. `Database` ： 数据库文件夹。
-    2. `Logs` ： 日志文件夹。
-    3. `Flask`： Flask文件夹。
-- **_TheSeedCoreExternalService_**: 外部服务文件夹
-- **_TheSeedCoreExternalLibrary_**: 外部库文件夹
 
 ### 加密
 
