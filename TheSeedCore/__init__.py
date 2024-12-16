@@ -1,133 +1,93 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import asyncio
+import multiprocessing
+import os
+import sys
+from importlib.metadata import version, PackageNotFoundError
+from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack, Callable
+
+from ._Common import _checkPackage, TextColor, PerformanceMonitor
+
+if TYPE_CHECKING:
+    pass
+
 __all__ = [
-    # Path
-    "RootDirectoryPath",
-    "ExternalLibraryDirectoryPath",
-    "ExternalServiceDirectoryPath",
-    "DataDirectoryPath",
-    "DatabaseDirectoryPath",
-    "FlaskDataDirectoryPath",
-    "FlaskStaticFolderPath",
-    "FlaskTemplateFolderPath",
-    "FlaskInstanceFolderPath",
-    "FlaskRootFolderPath",
-    "LogsDirectoryPath",
-    # __init__
-    "SystemType",
-    "DevelopmentEnv",
-    "ConnectTheSeedCore",
+    "DEVELOPMENT_ENV",
     "MainEventLoop",
+    "ConnectTheSeedCore",
+    "LinkStart",
+    "LinkStop",
     "AsyncTask",
     "ProcessTask",
     "ThreadTask",
-    "LinkStart",
-    "LinkStop",
-    # Common
-    "TextColor",
-    "PerformanceMonitor",
+
     # Concurrent
-    "Priority",
-    "ExpandPolicy",
-    "ShrinkagePolicy",
-    "TaskFuture",
-    "_serviceProcessID",
     "submitAsyncTask",
     "submitProcessTask",
     "submitThreadTask",
     "submitSystemProcessTask",
     "submitSystemThreadTask",
-    "_closeConcurrentSystem",
+    "ProcessPriority",
+    "ExpandPolicy",
+    "ShrinkagePolicy",
+    "TaskFuture",
+
     # Database
     "SQLiteDatabase",
     "MySQLDatabase",
-    # InstanceManager
-    "DatabaseInstanceManager",
-    "NetworkInstanceManager",
+
     # Logger
-    "TheSeedCoreLogger",
     "consoleLogger",
-    "LoggerManager",
-    # Network
+    "TheSeedCoreLogger",
+
+    # NetWork
     "WebSocketServer",
     "WebSocketClient",
     "HTTPServer",
     "AsyncFlask",
     "AsyncFastAPI",
+
     # Security
     "AESEncryptor",
     "RSAEncryptor"
 ]
-
-import asyncio
-import os
-import platform
-import sys
-from typing import TYPE_CHECKING, Optional, TypedDict, Literal, Unpack, Callable
-
-if TYPE_CHECKING:
-    pass
-
-__version__: str = "0.1.5"
-__author__: str = "B站疾风Kirito"
-__website__: str = "https://space.bilibili.com/6440741"
+__version__: str = "0.1.6"
+__author__: str = "疾风Kirito"
+__website__: str = "https://ns-cloud-backend-site"
 __repository__: str = "https://github.com/JFkirito/TheSeedCore"
 
 sys.set_int_max_str_digits(100000)
-SystemType = platform.system()
-DevelopmentEnv: bool = not hasattr(sys, "frozen") and not globals().get("__compiled__", False)
-RootDirectoryPath: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) if DevelopmentEnv else os.path.dirname(sys.executable)
-ExternalLibraryDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreExternalLibrary")
-ExternalServiceDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreExternalService")
-DataDirectoryPath: str = os.path.join(RootDirectoryPath, "TheSeedCoreData")
-DatabaseDirectoryPath: str = os.path.join(DataDirectoryPath, "Database")
-FlaskDataDirectoryPath: str = os.path.join(DataDirectoryPath, "Flask")
-FlaskStaticFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Static")
-FlaskTemplateFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Templates")
-FlaskInstanceFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Instance")
-FlaskRootFolderPath: str = os.path.join(FlaskDataDirectoryPath, "Root")
-LogsDirectoryPath: str = os.path.join(DataDirectoryPath, "Logs")
+DEVELOPMENT_ENV: bool = not hasattr(sys, "frozen") and not globals().get("__compiled__", False)
 
-_MainEventLoop: Optional[asyncio.AbstractEventLoop] = None
-_QtMode: bool = False
-_Connected: bool = False
+_MAIN_EVENT_LOOP: Optional[asyncio.AbstractEventLoop] = None
+_QT_MODE: bool = False
+_CONNECTED: bool = False
+_PYSIDE6_SUPPORT: bool = _checkPackage("PySide6")
+_PYQT6_SUPPORT: bool = _checkPackage("PyQt6")
+_PYQT5_SUPPORT: bool = _checkPackage("PyQt5")
 
-from ._Common import _checkPath, _checkPackageVersion, _checkPackage, _createPath, _addSystemPath  # noqa
-from ._Common import *
-from .Concurrent import _PySide6Support, _PyQt6Support, _PyQt5Support, _PyTorchSupport, _ConnectConcurrentSystem, _serviceProcessID, _closeConcurrentSystem  # noqa
+from .Concurrent import _connectConcurrentSystem, _closeConcurrentSystem  # noqa
+from .Network import _closeNetworkService  # noqa
 from .Concurrent import *
 from .Database import *
-from .InstanceManager import *
 from .Logger import *
 from .Network import *
 from .Security import *
 
-_checkPath(
-    ExternalLibraryDirectoryPath,
-    ExternalServiceDirectoryPath,
-    DataDirectoryPath,
-    DatabaseDirectoryPath,
-    FlaskDataDirectoryPath,
-    FlaskStaticFolderPath,
-    FlaskTemplateFolderPath,
-    FlaskInstanceFolderPath,
-    FlaskRootFolderPath,
-    LogsDirectoryPath
-)
-
 
 class _TheSeedCoreConfig(TypedDict, total=False):
-    check_env: bool
-    quit_qapp: bool
-    handle_sigint: bool
-    MainPriority: Literal[
-        Priority.IDLE,
-        Priority.BELOW_NORMAL,
-        Priority.NORMAL,
-        Priority.ABOVE_NORMAL,
-        Priority.HIGH,
-        Priority.REALTIME,
+    CheckEnv: bool
+    QuitQApp: bool
+    HandleSigint: bool
+    MainProcessPriority: Literal[
+        ProcessPriority.IDLE,
+        ProcessPriority.BELOW_NORMAL,
+        ProcessPriority.NORMAL,
+        ProcessPriority.ABOVE_NORMAL,
+        ProcessPriority.HIGH,
+        ProcessPriority.REALTIME,
     ]
     CoreProcessCount: Optional[int]
     CoreThreadCount: Optional[int]
@@ -136,13 +96,13 @@ class _TheSeedCoreConfig(TypedDict, total=False):
     IdleCleanupThreshold: Optional[int]
     TaskThreshold: Optional[int]
     GlobalTaskThreshold: Optional[int]
-    ProcessPriority: Literal[
-        Priority.IDLE,
-        Priority.BELOW_NORMAL,
-        Priority.NORMAL,
-        Priority.ABOVE_NORMAL,
-        Priority.HIGH,
-        Priority.REALTIME,
+    SubProcessPriority: Literal[
+        ProcessPriority.IDLE,
+        ProcessPriority.BELOW_NORMAL,
+        ProcessPriority.NORMAL,
+        ProcessPriority.ABOVE_NORMAL,
+        ProcessPriority.HIGH,
+        ProcessPriority.REALTIME,
     ]
     ExpandPolicy: Literal[
         ExpandPolicy.NoExpand,
@@ -159,40 +119,20 @@ class _TheSeedCoreConfig(TypedDict, total=False):
 
 
 def _checkQtApplicationInstance():
-    """
-    Checks if a Qt application instance is currently running.
-
-    This function verifies whether a Qt application instance exists for the supported
-    Qt libraries (PySide6, PyQt6, or PyQt5). If an instance is found, it returns
-    True; otherwise, it returns False. If none of the Qt libraries are available,
-    it raises an ImportError.
-
-    :raises ImportError: If no supported Qt libraries are found.
-
-    :return: True if a Qt application instance exists, False otherwise.
-    setup:
-        1. Check if PySide6 is supported.
-            1.1 If so, attempt to import QApplication from PySide6 and check for an instance.
-        2. Check if PyQt6 is supported.
-            2.1 If so, attempt to import QApplication from PyQt6 and check for an instance.
-        3. Check if PyQt5 is supported.
-            3.1 If so, attempt to import QApplication from PyQt5 and check for an instance.
-        4. If no supported Qt library is available, raise ImportError.
-    """
-
-    if _PySide6Support:
+    global _PYSIDE6_SUPPORT, _PYQT6_SUPPORT, _PYQT5_SUPPORT
+    if _PYSIDE6_SUPPORT:
         # noinspection PyUnresolvedReferences
         from PySide6.QtWidgets import QApplication
         if QApplication.instance():
             return True
         return False
-    if _PyQt6Support:
+    if _PYQT6_SUPPORT:
         # noinspection PyUnresolvedReferences
         from PyQt6.QtWidgets import QApplication
         if QApplication.instance():
             return True
         return False
-    if _PyQt5Support:
+    if _PYQT5_SUPPORT:
         # noinspection PyUnresolvedReferences
         from PyQt5.QtWidgets import QApplication
         if QApplication.instance():
@@ -201,38 +141,12 @@ def _checkQtApplicationInstance():
     raise ImportError("Qt is not available.")
 
 
-# noinspection PyUnresolvedReferences
-def _connectLinkStop():
-    """
-    Sets up a connection to the application's quit event to trigger cleanup operations.
-
-    This function connects the application's quit event to the LinkStop function,
-    ensuring that the necessary cleanup procedures are performed when the application
-    is about to exit. It checks for the presence of supported Qt libraries (PySide6,
-    PyQt6, or PyQt5) and connects the quit event accordingly.
-
-    setup:
-        1. Check if PySide6 is supported and the application is running in Qt mode.
-            1.1 If so, import QApplication from PySide6 and connect the quit event.
-        2. Check if PyQt6 is supported and the application is running in Qt mode.
-            2.1 If so, import QApplication from PyQt6 and connect the quit event.
-        3. Check if PyQt5 is supported and the application is running in Qt mode.
-            3.1 If so, import QApplication from PyQt5 and connect the quit event.
-    """
-
-    global _QtMode
-    if _PySide6Support and _QtMode:
-        # noinspection PyUnresolvedReferences
-        from PySide6.QtWidgets import QApplication
-        QApplication.instance().aboutToQuit.connect(LinkStop)
-    elif _PyQt6Support and _QtMode:
-        # noinspection PyUnresolvedReferences
-        from PyQt6.QtWidgets import QApplication
-        QApplication.instance().aboutToQuit.connect(LinkStop)
-    elif _PyQt5Support and _QtMode:
-        # noinspection PyUnresolvedReferences
-        from PyQt5.QtWidgets import QApplication
-        QApplication.instance().aboutToQuit.connect(LinkStop)
+def _checkPackageVersion(package_name: str) -> Optional[str]:
+    try:
+        package_version = version(package_name)
+        return package_version
+    except PackageNotFoundError:
+        return None
 
 
 def _compareVersions(current_version: str, target_version: str, comparison: Literal["==", "!=", "<", "<=", ">", ">="]) -> bool:
@@ -258,101 +172,53 @@ def _compareVersions(current_version: str, target_version: str, comparison: Lite
 
 
 def _createMainEventLoop(**config: Unpack[_TheSeedCoreConfig]) -> asyncio.AbstractEventLoop:
-    """
-    Creates the main asyncio event loop for TheSeedCore.
-
-    This function checks for the availability of Qt support (PySide6, PyQt6, PyQt5) and
-    configures the appropriate event loop accordingly. If a Qt application instance exists,
-    it sets up the event loop to work seamlessly with Qt's event handling.
-
-    :param config: Configuration options to customize the behavior of the event loop.
-        - quit_qapp: A boolean indicating whether to quit the Qt application.
-        - handle_sigint: A boolean indicating whether to handle SIGINT signals.
-    :return: The configured asyncio event loop instance.
-    :raise: Raises an exception if no suitable Qt framework is found or if event loop creation fails.
-    setup:
-        1. Check for PySide6 support and its application instance.
-            1.1. If supported, compare the version and set the event loop policy accordingly.
-        2. Check for PyQt6 support and its application instance.
-            2.1. Set up the event loop if supported.
-        3. Check for PyQt5 support and its application instance.
-            3.1. Set up the event loop if supported.
-        4. If no Qt support, default to the standard asyncio event loop.
-    """
-
-    global _QtMode
-    if _PySide6Support and _checkQtApplicationInstance():
+    global _PYSIDE6_SUPPORT, _PYQT6_SUPPORT, _PYQT5_SUPPORT, _QT_MODE
+    if _PYSIDE6_SUPPORT and _checkQtApplicationInstance():
         if _compareVersions(_checkPackageVersion("PySide6"), "6.7.0", ">="):
+            # noinspection PyUnresolvedReferences
             from PySide6.QtAsyncio import QAsyncioEventLoopPolicy
             default_event_loop_policy = asyncio.get_event_loop_policy()
-            asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("quit_qapp", True), handle_sigint=config.get("handle_sigint", True)))
+            asyncio.set_event_loop_policy(QAsyncioEventLoopPolicy(quit_qapp=config.get("QuitQApp", True), handle_sigint=config.get("HandleSigint", True)))
             main_event_loop = asyncio.get_event_loop()
             asyncio.set_event_loop_policy(default_event_loop_policy)
-            _QtMode = True
+            _QT_MODE = True
         elif _checkPackage("qasync"):
+            # noinspection PyUnresolvedReferences
             import qasync
+            # noinspection PyUnresolvedReferences
             from PySide6.QtWidgets import QApplication
             main_event_loop = qasync.QEventLoop(QApplication.instance())
             asyncio.set_event_loop(main_event_loop)
-            _QtMode = True
+            _QT_MODE = True
         else:
             main_event_loop = asyncio.get_event_loop()
-    elif _PyQt6Support and _checkQtApplicationInstance():
-        if _checkPackage("qasync"):
-            import qasync
-            # noinspection PyUnresolvedReferences
-            from PyQt6.QtWidgets import QApplication
-            main_event_loop = qasync.QEventLoop(QApplication.instance())
-            asyncio.set_event_loop(main_event_loop)
-            _QtMode = True
-        else:
-            main_event_loop = asyncio.get_event_loop()
-    elif _PyQt5Support and _checkQtApplicationInstance():
-        if _checkPackage("qasync"):
-            import qasync
-            # noinspection PyUnresolvedReferences
-            from PyQt5.QtWidgets import QApplication
-            main_event_loop = qasync.QEventLoop(QApplication.instance())
-            asyncio.set_event_loop(main_event_loop)
-            _QtMode = True
-        else:
-            main_event_loop = asyncio.get_event_loop()
+    elif _PYQT6_SUPPORT and _checkQtApplicationInstance() and _checkPackage("qasync"):
+        # noinspection PyUnresolvedReferences
+        import qasync
+        # noinspection PyUnresolvedReferences
+        from PyQt6.QtWidgets import QApplication
+        main_event_loop = qasync.QEventLoop(QApplication.instance())
+        asyncio.set_event_loop(main_event_loop)
+        _QT_MODE = True
+    elif _PYQT5_SUPPORT and _checkQtApplicationInstance() and _checkPackage("qasync"):
+        # noinspection PyUnresolvedReferences
+        import qasync
+        # noinspection PyUnresolvedReferences
+        from PyQt5.QtWidgets import QApplication
+        main_event_loop = qasync.QEventLoop(QApplication.instance())
+        asyncio.set_event_loop(main_event_loop)
+        _QT_MODE = True
     else:
         main_event_loop = asyncio.get_event_loop()
 
     return main_event_loop
 
 
-def _showSupportInfo(qt_support: bool):
-    """
-    Displays support information regarding various modules and features available in TheSeedCore.
-
-    This function checks for the availability of Qt support, PyTorch support,
-    security modules, database support, and network support. It prints messages to
-    the console indicating whether each feature is available or not, and provides
-    installation instructions for missing packages.
-
-    :param qt_support: A boolean indicating whether Qt support is available.
-    :return: None
-    :raise: This function does not raise exceptions, but will output messages to the console.
-    setup:
-        1. Check if Qt mode is supported and print the appropriate message.
-        2. Check if GPU boost is available with PyTorch and print the appropriate message.
-        3. Check if the security module is available and provide installation guidance if not.
-        4. Check if MySQL database support is available and provide installation guidance if not.
-        5. Check if websocket support is available and provide installation guidance if not.
-        6. Check if HTTP server support is available and provide installation guidance if not.
-    """
-
-    if not qt_support:
+def _showSupportInfo():
+    if not _QT_MODE:
         print(TextColor.YELLOW_BOLD.value + "[QtSupport] Qt mode is not available. If you want to use QtMode, please install [PySide6] or [PyQt6] or [PyQt5] packages" + TextColor.RESET.value)
     else:
         print(TextColor.GREEN_BOLD.value + "[QtSupport] Qt mode is available." + TextColor.RESET.value)
-    if not _PyTorchSupport:
-        print(TextColor.YELLOW_BOLD.value + "[PyTorchSupport] GPU boost is not available." + TextColor.RESET.value)
-        print(TextColor.YELLOW_BOLD.value + "[PyTorchSupport] If you want to use GPU boost, please use [pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121] command to install PyTorch packages" + TextColor.RESET.value)
-    else:
-        print(TextColor.GREEN_BOLD.value + "[PyTorchSupport] GPU boost is available." + TextColor.RESET.value)
     if not _checkPackage("keyring") and not _checkPackage("pycryptodome"):
         print(TextColor.YELLOW_BOLD.value + "[SecuritySupport] Security module is not available. If you want to use security module, please install [keyring, pycryptodome] packages" + TextColor.RESET.value)
     else:
@@ -372,24 +238,6 @@ def _showSupportInfo(qt_support: bool):
 
 
 def _showBanner(service_process_id: int):
-    """
-    Displays a banner with information about the TheSeedCore service.
-
-    This function prints a stylized text banner to the console, showcasing the
-    TheSeedCore logo, version number, and process IDs. The banner also includes
-    the address of the latest repositories for TheSeedCore.
-
-    :param service_process_id: The process ID of the service process.
-    :return: None
-    :raise: This function does not raise exceptions, but will output to the console.
-    setup:
-        1. Print the TheSeedCore logo.
-        2. Display the current version of TheSeedCore.
-        3. Show the Main Process ID of the application.
-        4. Show the Service Process ID passed as a parameter.
-        5. Display the latest repositories address.
-    """
-
     print(TextColor.PURPLE_BOLD.value + "  ______    __           _____                   __   ______                     ")
     print(TextColor.PURPLE_BOLD.value + " /_  __/   / /_   ___   / ___/  ___   ___   ____/ /  / ____/  ____    _____  ___ ")
     print(TextColor.PURPLE_BOLD.value + "  / /     / __ \\ / _ \\  \\__ \\  / _ \\ / _ \\ / __  /  / /      / __ \\  / ___/ / _ \\")
@@ -400,81 +248,37 @@ def _showBanner(service_process_id: int):
     print(TextColor.PURPLE_BOLD.value + f"MainProcess ID - [{os.getpid()}]" + TextColor.RESET.value)
     if service_process_id != 0:
         print(TextColor.PURPLE_BOLD.value + f"ServiceProcess ID - [{service_process_id}]" + TextColor.RESET.value)
-    print(TextColor.PURPLE_BOLD.value + f"Latest repositories address {__repository__}" + TextColor.RESET.value)
+    print(TextColor.PURPLE_BOLD.value + f"Latest repositories address {__repository__}\n" + TextColor.RESET.value)
 
 
-def _cleanupNetworkService():
-    """
-    Cleans up the network services by stopping all active HTTP and WebSocket servers.
-
-    This function retrieves all instances of HTTP and WebSocket servers managed
-    by the NetworkInstanceManager and initiates their shutdown processes. It
-    submits the stop tasks to a thread pool for asynchronous execution. The
-    function then waits until all HTTP and WebSocket server instances have
-    completed their shutdown procedures before returning.
-
-    :return: None
-    :raise: This function does not raise exceptions, but will log errors
-            if any occur during the shutdown process of the servers.
-    setup:
-        1. Retrieve all HTTP server instances.
-        2. Retrieve all WebSocket server instances.
-        3. Submit stop tasks for each HTTP server instance.
-        4. Submit stop tasks for each WebSocket server instance.
-        5. Wait for all HTTP server instances to close.
-        6. Wait for all WebSocket server instances to close.
-    """
-
-    all_http_server = NetworkInstanceManager.getAllHTTPServerInstances()
-    all_websocket_server = NetworkInstanceManager.getAllWebSocketServerInstances()
-    for http_server_instance in all_http_server.values():
-        submitThreadTask(http_server_instance.stopHTTPServer)
-    for websocket_server_instance in all_websocket_server.values():
-        submitThreadTask(websocket_server_instance.stopWebSocketServer)
-    while True:
-        if all([http_server_instance.IsClosed for http_server_instance in all_http_server.values()]):
-            break
-    while True:
-        if all([websocket_server_instance.IsClosed for websocket_server_instance in all_websocket_server.values()]):
-            break
+# noinspection PyUnresolvedReferences
+def _connectLinkStop():
+    global _PYSIDE6_SUPPORT, _PYQT6_SUPPORT, _PYQT5_SUPPORT, _QT_MODE
+    if _PYSIDE6_SUPPORT and _QT_MODE:
+        # noinspection PyUnresolvedReferences
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().aboutToQuit.connect(LinkStop)
+        return
+    if _PYQT6_SUPPORT and _QT_MODE:
+        # noinspection PyUnresolvedReferences
+        from PyQt6.QtWidgets import QApplication
+        QApplication.instance().aboutToQuit.connect(LinkStop)
+        return
+    if _PYQT5_SUPPORT and _QT_MODE:
+        # noinspection PyUnresolvedReferences
+        from PyQt5.QtWidgets import QApplication
+        QApplication.instance().aboutToQuit.connect(LinkStop)
+        return
 
 
 def MainEventLoop() -> asyncio.AbstractEventLoop:
-    """
-    Retrieves the current main event loop for TheSeedCore.
-
-    This function accesses the global variable that holds the main event loop
-    instance and returns it. The event loop is used for managing asynchronous
-    operations within the TheSeedCore framework.
-
-    :return: The main event loop instance of type asyncio.AbstractEventLoop.
-    :raise: Raises a NameError if the global main event loop variable is not defined.
-    """
-
-    global _MainEventLoop, _Connected
-    if not _Connected:
+    global _MAIN_EVENT_LOOP, _CONNECTED
+    if not _CONNECTED:
         raise RuntimeError("TheSeedCore is not connected.")
-    return _MainEventLoop
+    return _MAIN_EVENT_LOOP
 
 
 def AsyncTask(func: Optional[Callable] = None) -> Callable:
-    """
-    Decorator for submitting asynchronous tasks as coroutines.
-
-    This decorator is used to ensure that a function is executed as a coroutine and can be submitted to the main event loop.
-    If the function is not already a coroutine, a `TypeError` is raised. This allows you to submit async functions as tasks
-    to be executed asynchronously.
-
-    :param func: The function to be decorated (optional). If provided, it directly decorates the function.
-                 Otherwise, it returns a decorator to be applied to a function.
-    :return: A coroutine task that is submitted to the event loop.
-    :raises: TypeError if the decorated function is not a coroutine.
-    setup:
-        1. The decorator checks if the function is a coroutine.
-        2. If the function is a coroutine, it wraps it and submits it to the event loop.
-        3. The result is an asynchronous task that can be awaited or tracked in the event loop.
-    """
-
     def decorator(actual_func: Callable) -> Callable:
         if not asyncio.iscoroutinefunction(actual_func):
             raise TypeError(f"The function <{actual_func.__name__}> must be a coroutine.")
@@ -492,24 +296,6 @@ def AsyncTask(func: Optional[Callable] = None) -> Callable:
 
 
 def ProcessTask(priority=0, callback=None, future=None) -> Callable:
-    """
-    Decorator for submitting process tasks with specified priority and optional callback or future handling.
-
-    This decorator is used to wrap a task function so that it can be submitted for execution as a process task.
-    It allows specifying the priority of the task, an optional callback function to handle the result, and an optional
-    `future` object for asynchronous task handling.
-
-    :param priority: The priority of the task (default is 0). Higher values indicate higher priority.
-    :param callback: An optional callback function that will be executed once the task completes.
-    :param future: An optional `future` object that can be used to track the task's result.
-    :return: A wrapped version of the original function that submits the task to the process pool.
-    :raises: None
-    setup:
-        1. Takes a function `func` that represents the task to be executed.
-        2. The decorator wraps the task function and submits it to the process pool with the specified priority.
-        3. Allows the specification of a callback and future for task completion handling.
-    """
-
     def decorator(func: Callable) -> Callable:
         def wrapper(*args, **kwargs) -> TaskFuture:
             return submitProcessTask(func, priority, callback, future, *args, **kwargs)
@@ -520,24 +306,6 @@ def ProcessTask(priority=0, callback=None, future=None) -> Callable:
 
 
 def ThreadTask(priority=0, callback=None, future=None) -> Callable:
-    """
-    Decorator for submitting thread tasks with specified priority and optional callback or future handling.
-
-    This decorator function is used to wrap a task function so that it can be submitted for execution as a thread task.
-    It allows specifying the priority of the task, an optional callback function to handle the result, and an optional
-    `future` object for asynchronous task handling.
-
-    :param priority: The priority of the task (default is 0). Higher values indicate higher priority.
-    :param callback: An optional callback function that will be executed once the task completes.
-    :param future: An optional `future` object that can be used to track the task's result.
-    :return: A wrapped version of the original function that submits the task to the thread pool.
-    :raises: None
-    setup:
-        1. Takes a function `func` that represents the task to be executed.
-        2. The decorator wraps the task function and submits it to the thread pool with the specified priority.
-        3. Allows the specification of a callback and future for task completion handling.
-    """
-
     def decorator(func: Callable) -> Callable:
         def wrapper(*args, **kwargs) -> TaskFuture:
             return submitThreadTask(func, priority, callback, future, *args, **kwargs)
@@ -548,78 +316,38 @@ def ThreadTask(priority=0, callback=None, future=None) -> Callable:
 
 
 def ConnectTheSeedCore(**config: Unpack[_TheSeedCoreConfig]):
-    """
-    Connects the core system components, initializes the event loop, and sets up concurrency.
+    global _MAIN_EVENT_LOOP, DEVELOPMENT_ENV, _CONNECTED
 
-    :param config: A variable-length argument dictionary of configuration options for initializing the system.
-    :return: None
-    :raise: None
-    setup:
-        1. Creates the main event loop using the provided configuration.
-        2. If 'check_env' is True in the config and the environment is not DevelopmentEnv, displays support information.
-        3. If CoreProcessCount or CoreThreadCount is not zero in the config, sets up the concurrent system using _ConnectConcurrentSystem.
-        4. Displays a banner showing the service process ID.
-        5. Initiates the connection to stop the link with _connectLinkStop.
-
-    Note:
-        - The function checks the environment settings and displays information about system requirements if needed.
-        - The function also sets up the concurrent processing system if the configuration indicates a need for core processes or threads.
-        - System components like the event loop and the service process banner are initialized as part of the setup.
-    """
-
-    global _MainEventLoop, DevelopmentEnv, _Connected
-    _MainEventLoop = _createMainEventLoop(**config)
-    if config.get("check_env", False) and DevelopmentEnv:
-        _showSupportInfo(_QtMode)
-    if config.get("CoreProcessCount", None) != 0 or config.get("CoreThreadCount", None) != 0:
-        _ConnectConcurrentSystem(_MainEventLoop, **config)
-    _showBanner(_serviceProcessID())
+    _MAIN_EVENT_LOOP = _createMainEventLoop(**config)
+    check_env = config.get("CheckEnv", True)
+    config_core_process_count = config.get("CoreProcessCount", None)
+    config_core_thread_count = config.get("CoreThreadCount", None)
+    shared_manager = None
+    shared_manager_pid = 0
+    if config_core_process_count is not None and config_core_process_count > 0:
+        shared_manager = multiprocessing.Manager()
+        shared_manager_pid = shared_manager._process.pid  # noqa
+    _showBanner(shared_manager_pid)
+    if check_env and DEVELOPMENT_ENV:
+        _showSupportInfo()
+    if config_core_process_count is not None or config_core_thread_count is not None:
+        _connectConcurrentSystem(shared_manager, _MAIN_EVENT_LOOP, **config)
     _connectLinkStop()
-    _Connected = True
+    _CONNECTED = True
+    print(TextColor.GREEN_BOLD.value + f"\nTheSeedCore connection completed. System standing by...\n" + TextColor.RESET.value)
 
 
 def LinkStart():
-    """
-    Starts the main event loop for the application and indicates that the system is ready for operations.
-
-    This function prints a message to the console indicating that the connection
-    has been established and the system is now standing by. It then enters an
-    infinite loop to keep the event loop running until explicitly stopped.
-
-    :return: None
-    :raise: Raises exceptions if the event loop encounters errors during execution.
-
-    setup:
-        1. Print a confirmation message indicating the system is ready.
-        2. Call `run_forever` on the main event loop to start processing events.
-    """
-
-    global _MainEventLoop
-    print(TextColor.GREEN_BOLD.value + f"TheSeedCore connection completed. System standing by...\n" + TextColor.RESET.value)
+    global _MAIN_EVENT_LOOP
     try:
-        _MainEventLoop.run_forever()
-        sys.exit()
-    except (BrokenPipeError, EOFError, KeyboardInterrupt, Exception):
-        pass
+        _MAIN_EVENT_LOOP.run_forever()
+    except (BrokenPipeError, EOFError, KeyboardInterrupt, Exception) as e:
+        print(TextColor.RED_BOLD.value + f"Error: {e}" + TextColor.RESET.value)
 
 
 def LinkStop():
-    """
-    Safely stops the link services and performs necessary cleanup operations.
-
-    This function orchestrates the shutdown process by calling various cleanup
-    methods to ensure that all resources are released properly before stopping the
-    link services.
-
-    :return: None
-    :raise: Raises exceptions if any cleanup operation fails.
-
-    setup:
-        1. Call `_cleanupNetworkService` to stop any network services.
-        2. Invoke `closeConcurrentSystem` to close any concurrent operations or threads.
-    """
-
-    _cleanupNetworkService()
+    global _MAIN_EVENT_LOOP, _QT_MODE
+    _closeNetworkService()
     _closeConcurrentSystem()
-    if not _QtMode:
-        _MainEventLoop.stop()
+    if not _QT_MODE:
+        _MAIN_EVENT_LOOP.stop()

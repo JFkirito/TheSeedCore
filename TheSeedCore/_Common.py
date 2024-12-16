@@ -1,48 +1,37 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-__all__ = [
-    "TextColor",
-    "PerformanceMonitor",
-]
-
 import ctypes
 import importlib.util
 import os
 import platform
 import subprocess
-import sys
 import time
 from ctypes import wintypes
 from enum import Enum
-from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING, Union, List, Dict, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     pass
 
+SYSTEM_TYPE: str = platform.system()
 
-class TextColor(Enum):
-    RESET: str = "\033[0m"
 
-    RED: str = "\033[31m"
-    GREEN: str = "\033[32m"
-    YELLOW: str = "\033[33m"
-    BLUE: str = "\033[34m"
-    PURPLE: str = "\033[35m"
-    CYAN: str = "\033[36m"
-    WHITE: str = "\033[37m"
+def _checkPackage(package_name: str) -> bool:
+    if importlib.util.find_spec(package_name) is not None:
+        return True
+    return False
 
-    RED_BOLD: str = "\033[1m\033[31m"
-    GREEN_BOLD: str = "\033[1m\033[32m"
-    YELLOW_BOLD: str = "\033[1m\033[33m"
-    BLUE_BOLD: str = "\033[1m\033[34m"
-    PURPLE_BOLD: str = "\033[1m\033[35m"
-    CYAN_BOLD: str = "\033[1m\033[36m"
-    WHITE_BOLD: str = "\033[1m\033[37m"
 
-    def apply(self, text: str) -> str:
-        return f"{self.value}{text}{TextColor.RESET.value}"
+def _selectResourceMonitor() -> Union[_LinuxMonitor, _WindowsMonitor, _MacOSMonitor]:
+    if SYSTEM_TYPE == "Linux":
+        return _LinuxMonitor()
+    elif SYSTEM_TYPE == "Windows":
+        return _WindowsMonitor()
+    elif SYSTEM_TYPE == "Darwin":
+        return _MacOSMonitor()
+    else:
+        raise OSError("The current system is not supported.")
 
 
 class _LinuxMonitor:
@@ -276,6 +265,7 @@ class _WindowsMonitor:
 
         kernel_time_start, user_time_start = cls.FileTime(), cls.FileTime()
         kernel_time_end, user_time_end = cls.FileTime(), cls.FileTime()
+
         result = ctypes.windll.kernel32.GetProcessTimes(
             handle,
             ctypes.byref(cls.FileTime()), ctypes.byref(cls.FileTime()),
@@ -395,325 +385,67 @@ class _MacOSMonitor:
 
 
 class PerformanceMonitor:
-    """
-    PerformanceMonitor is a singleton class that provides methods for monitoring system resources such as CPU and memory.
-
-    The class is a singleton designed to monitor system resources, providing methods to retrieve information about CPU
-    and memory usage at both system-wide and per-process levels.
-    It is used to help optimize application performance by tracking resource usage and detecting potential bottlenecks.
-
-    ClassAttributes:
-        _INSTANCE: The singleton instance of the PerformanceMonitor class.
-        _INITIALIZED: A flag to indicate whether the instance has been initialized.
-
-    Methods:
-        physicalCpuCores: Returns the number of physical CPU cores.
-        logicalCpuCores: Returns the number of logical CPU cores.
-        totalPhysicalMemory: Returns the total physical memory available in the system.
-        totalVirtualMemory: Returns the total virtual memory available in the system.
-        totalCpuUsage: Returns the total CPU usage over a specified interval.
-        processCpuUsage: Returns the CPU usage for a specified process ID over a given interval.
-        processMemoryUsage: Returns the memory usage for a specified process ID.
-    """
-
     _INSTANCE: PerformanceMonitor = None
     _INITIALIZED: bool = False
 
-    def __new__(cls, system_type: str):
+    def __new__(cls):
         if cls._INSTANCE is None:
             cls._INSTANCE = super().__new__(cls)
         return cls._INSTANCE
 
-    def __init__(self, system_type: str):
+    def __init__(self):
         if PerformanceMonitor._INITIALIZED:
             return
-        self._BaseMonitor = _selectResourceMonitor(system_type)
+        self._BaseMonitor = _selectResourceMonitor()
         PerformanceMonitor._INITIALIZED = True
 
     @classmethod
     def physicalCpuCores(cls) -> int:
-        """
-        Retrieves the number of physical CPU cores available in the system.
-
-        This class method accesses the appropriate method in the base monitor instance
-        to return the count of physical CPU cores, excluding any hyper-threaded cores.
-
-        :return: The number of physical CPU cores.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `physicalCpuCores` method of the base monitor instance.
-        """
-
         return cls._INSTANCE._BaseMonitor.physicalCpuCores()
 
     @classmethod
     def logicalCpuCores(cls) -> int:
-        """
-        Retrieves the number of logical CPU cores available in the system.
-
-        This class method accesses the appropriate method in the base monitor instance
-        to return the count of logical CPU cores, which includes both physical cores and
-        any hyper-threaded cores.
-
-        :return: The number of logical CPU cores.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `logicalCpuCores` method of the base monitor instance.
-        """
-
         return cls._INSTANCE._BaseMonitor.logicalCpuCores()
 
     @classmethod
     def totalPhysicalMemory(cls) -> int:
-        """
-        Retrieves the total physical memory of the system.
-
-        This class method returns the total amount of physical memory (RAM) available
-        in the system by accessing the appropriate method in the base monitor instance.
-
-        :return: The total physical memory in bytes.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `totalPhysicalMemory` method of the base monitor instance.
-        """
-
         return cls._INSTANCE._BaseMonitor.totalPhysicalMemory()
 
     @classmethod
     def totalVirtualMemory(cls) -> int:
-        """
-        Retrieves the total virtual memory of the system.
-
-        This class method returns the total amount of virtual memory available
-        in the system by accessing the appropriate method in the base monitor instance.
-
-        :return: The total virtual memory in bytes.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `totalVirtualMemory` method of the base monitor instance.
-        """
-
         return cls._INSTANCE._BaseMonitor.totalVirtualMemory()
 
     @classmethod
     def totalCpuUsage(cls, interval: Optional[float] = 1.0) -> float:
-        """
-        Retrieves the total CPU usage across all processes.
-
-        This class method calculates the total CPU usage of the system over
-        a specified interval. It uses the base monitor instance to access
-        the required functionality for measuring the total CPU usage.
-
-        :param interval: The time interval in seconds over which to measure the CPU usage.
-                         Defaults to 1.0 second if not specified.
-        :return: The total CPU usage as a percentage.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `totalCpuUsage` method of the base monitor instance with the specified interval.
-        """
-
         return cls._INSTANCE._BaseMonitor.totalCpuUsage(interval)
 
     @classmethod
     def processCpuUsage(cls, pid: Optional[int], interval: Optional[float] = 1.0) -> int:
-        """
-        Retrieves the CPU usage of a specified process.
-
-        This class method accesses the CPU usage information of a process
-        identified by its process ID (pid) over a specified interval. The
-        method delegates the call to the corresponding method in the base
-        monitor instance.
-
-        :param pid: The process ID of the target process whose CPU usage is to be retrieved.
-        :param interval: The time interval in seconds over which to measure the CPU usage.
-                         Defaults to 1.0 second if not specified.
-        :return: The CPU usage of the specified process as a percentage.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `processCpuUsage` method of the base monitor instance with the given pid and interval.
-        """
-
         return cls._INSTANCE._BaseMonitor.processCpuUsage(pid, interval)
 
     @classmethod
     def processMemoryUsage(cls, pid: int) -> int:
-        """
-        Retrieves the memory usage of a specified process.
-
-        This class method accesses the memory usage information of a process
-        identified by its process ID (pid) by invoking the corresponding method
-        from the base monitor instance.
-
-        :param pid: The process ID of the target process whose memory usage is to be retrieved.
-        :return: The memory usage of the specified process in bytes.
-
-        setup:
-            1. Ensure that the class has a valid instance of the base monitor.
-            2. Call the `processMemoryUsage` method of the base monitor instance with the given pid.
-        """
-
         return cls._INSTANCE._BaseMonitor.processMemoryUsage(pid)
 
 
-def _checkPackage(package_name: str) -> bool:
-    """
-    Checks if a specified package is installed in the current environment.
+class TextColor(Enum):
+    RESET: str = "\033[0m"
 
-    This function uses the `importlib.util.find_spec` method to determine
-    if the given package can be found. It returns True if the package is
-    installed and False otherwise.
+    RED: str = "\033[31m"
+    GREEN: str = "\033[32m"
+    YELLOW: str = "\033[33m"
+    BLUE: str = "\033[34m"
+    PURPLE: str = "\033[35m"
+    CYAN: str = "\033[36m"
+    WHITE: str = "\033[37m"
 
-    :param package_name: The name of the package to check for installation.
-    :return: True if the package is installed, False if it is not.
+    RED_BOLD: str = "\033[1m\033[31m"
+    GREEN_BOLD: str = "\033[1m\033[32m"
+    YELLOW_BOLD: str = "\033[1m\033[33m"
+    BLUE_BOLD: str = "\033[1m\033[34m"
+    PURPLE_BOLD: str = "\033[1m\033[35m"
+    CYAN_BOLD: str = "\033[1m\033[36m"
+    WHITE_BOLD: str = "\033[1m\033[37m"
 
-    setup:
-        1. Attempt to find the package using `importlib.util.find_spec`.
-        2. Return True if the package is found; otherwise, return False.
-    """
-
-    if importlib.util.find_spec(package_name) is not None:
-        return True
-    return False
-
-
-def _checkPackageVersion(package_name: str) -> Optional[str]:
-    """
-    Checks the installed version of the specified package.
-
-    This function attempts to retrieve the version of a given package using
-    the `importlib.metadata` module. If the package is found, it returns
-    the version string. If the package is not installed, it returns None.
-
-    :param package_name: The name of the package whose version is to be checked.
-    :return: The version of the package as a string, or None if the package is not found.
-
-    setup:
-        1. Try to retrieve the package version:
-            1.1. If the package is found, return its version.
-            1.2. If the package is not found, return None.
-    """
-
-    try:
-        package_version = version(package_name)
-        return package_version
-    except PackageNotFoundError:
-        return None
-
-
-def _createPath(path: str) -> None:
-    """
-    Creates the specified directory path if it does not already exist.
-
-    This function checks if the provided path exists. If the path does not exist,
-    it creates the entire directory tree specified by the path. This is useful
-    for ensuring that directories exist before attempting to write files to them.
-
-    :param path: The directory path to be created.
-    :return: None
-
-    setup:
-        1. Check if the specified path exists:
-            1.1. If it does not exist, create the directory (and any necessary parent directories).
-    """
-
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def _addSystemPath(path: str) -> None:
-    """
-    Adds the specified path to the system path if it is not already present.
-
-    This function checks if the provided path exists in the system's module search path
-    (sys.path). If the path is not already included, it appends the path to sys.path,
-    allowing for modules located in that directory to be imported.
-
-    :param path: The path to be added to the system path.
-    :return: None
-
-    setup:
-        1. Check if the provided path is not already in sys.path:
-            1.1. If not, append the path to sys.path.
-    """
-
-    if path not in sys.path:
-        sys.path.append(path)
-
-
-def _checkPath(*paths: Union[str, list, tuple, dict]) -> Union[str, List[str], Dict[str, str]]:
-    """
-    Checks the validity of the provided paths and processes them by creating necessary directories
-    and adding them to the system path.
-
-    This function can accept a single path as a string, multiple paths as a list or tuple, or
-    a dictionary of paths. For each path provided, it will ensure that the directory exists
-    (creating it if necessary) and add the path to the system path.
-
-    :param paths: A single path as a string, multiple paths as a list or tuple, or a dictionary
-                  where keys are identifiers and values are paths to be processed.
-    :return: The processed path if a single string is provided, a list of processed paths if
-             a list or tuple is provided, or a dictionary of processed paths if a dictionary is provided.
-
-    :raise TypeError: Raises a TypeError if the provided parameters are not strings, lists/tuples, or dictionaries.
-
-    setup:
-        1. Define a helper function process_single_path to handle individual paths:
-            1.1. Call _createPath to create the directory if it does not exist.
-            1.2. Call _addSystemPath to add the path to the system path.
-            1.3. Return the processed path.
-        2. Check the type of paths:
-            2.1. If paths is a string, process it using process_single_path and return the result.
-            2.2. If paths is a list or tuple, process each path using process_single_path and return a list of results.
-            2.3. If paths is a dictionary, process each value using process_single_path and return a dictionary of results.
-        3. If paths is none of the above types, raise a TypeError.
-    """
-
-    def process_single_path(p: str) -> str:
-        _createPath(p)
-        _addSystemPath(p)
-        return p
-
-    if isinstance(paths, str):
-        return process_single_path(paths)
-    if isinstance(paths, (list, tuple)):
-        return [process_single_path(p) for p in paths]
-    if isinstance(paths, dict):
-        return {k: process_single_path(v) for k, v in paths.items()}
-    raise TypeError("Parameters must be strings, lists/tuples, or dictionaries")
-
-
-def _selectResourceMonitor(system_type) -> Union[_LinuxMonitor, _WindowsMonitor, _MacOSMonitor]:
-    """
-    Selects the appropriate resource monitor class based on the provided system type.
-
-    This function instantiates and returns a resource monitor object corresponding to the operating system.
-    It supports Linux, Windows, and macOS (Darwin) systems. If the provided system type is unsupported,
-    it raises an OSError.
-
-    :param system_type: A string representing the type of operating system ("Linux", "Windows", or "Darwin").
-    :return: An instance of the corresponding resource monitor class for the specified operating system.
-
-    :raise OSError: If the provided system type is not supported, an OSError is raised indicating that the current system is not supported.
-
-    setup:
-        1. Check the value of the system_type parameter.
-        2. If system_type is "Linux", instantiate and return _LinuxMonitor.
-        3. If system_type is "Windows", instantiate and return _WindowsMonitor.
-        4. If system_type is "Darwin", instantiate and return _MacOSMonitor.
-        5. If system_type is any other value, raise an OSError indicating unsupported system type.
-    """
-
-    if system_type == "Linux":
-        return _LinuxMonitor()
-    elif system_type == "Windows":
-        return _WindowsMonitor()
-    elif system_type == "Darwin":
-        return _MacOSMonitor()
-    else:
-        raise OSError("The current system is not supported.")
+    def apply(self, text: str) -> str:
+        return f"{self.value}{text}{TextColor.RESET.value}"
