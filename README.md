@@ -116,7 +116,7 @@ TheSeedCore 框架适用于需要高并发处理、安全数据操作、实时�
 3. 如果不希望看到依赖检查信息，可以在调用 `ConnectTheSeedCore` 时传递 `CheckEnv=False`，依赖检查信息将不会显示在控制台中。
 
 ```python
-import Backup as TSC
+import TheSeedCore as TSC
 
 if __name__ == "__main__":
     # 传递check_env=False将不会显示依赖检查信息
